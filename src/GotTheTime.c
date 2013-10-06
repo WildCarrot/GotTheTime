@@ -71,6 +71,11 @@ PBL_APP_INFO(MY_UUID,
 #define LOWER_DATE_WIDTH  SCREEN_DATE_WIDTH
 #define LOWER_DATE_HEIGHT 31 // SMALL_FONT_HEIGHT + FONT_PAD_Y + DRAW_INSET
 
+#define LOWER_TIME_X DRAW_INSET
+#define LOWER_TIME_Y 112 // SCREEN_TIME_Y + SCREEN_TIME_HEIGHT + FONT_PAD_Y
+#define LOWER_TIME_WIDTH  SCREEN_TIME_WIDTH
+#define LOWER_TIME_HEIGHT 31 // SMALL_FONT_HEIGHT
+
 #define VIBRATE_HOURLY 1 // Change to 0 to disable
 
 Window window;
@@ -78,12 +83,13 @@ Window window;
 TextLayer text_date_layer;
 TextLayer text_time_layer;
 TextLayer text_lower_date_layer;
+TextLayer text_lower_time_layer;
 
 Layer line_layer;
 Layer lower_line_layer;
 
 const VibePattern HOUR_VIBE_PATTERN = {
-  .durations = (uint32_t []) {50, 200, 50, 200},
+  .durations = (uint32_t []) {50, 100, 50, 100},
   .num_segments = 4
 };
 
@@ -112,6 +118,7 @@ void draw_screen(AppContextRef ctx, PblTm* ptime) {
   static char time_text[]  = "00:00";
   static char date_text[]  = "Xxxxxxxxxx"; // Sunday
   static char lower_date[] = "0000-00-00"; // 2013-10-02
+  static char lower_time[] = "XX"; // AM
 
   static bool  last_time_saved = false;
   static PblTm last_time;
@@ -141,8 +148,12 @@ void draw_screen(AppContextRef ctx, PblTm* ptime) {
 
   // Remove the leading zero for 12-hour clocks.
   // Only needed because there's no non-padded hour format string.
-  if (!clock_is_24h_style() && (time_text[0] == '0')) {
-    memmove(time_text, &time_text[1], sizeof(time_text) - 1);
+  if (!clock_is_24h_style()) {
+    if (time_text[0] == '0') {
+      memmove(time_text, &time_text[1], sizeof(time_text) - 1);
+    }
+    string_format_time(lower_time, sizeof(lower_time), "%p", ptime);
+    text_layer_set_text(&text_lower_time_layer, lower_time);
   }
 
   text_layer_set_text(&text_time_layer, time_text);
@@ -194,6 +205,17 @@ void handle_init(AppContextRef ctx) {
   text_layer_set_font(&text_lower_date_layer,
 		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
   layer_add_child(&window.layer, &text_lower_date_layer.layer);
+
+  // Lower text layer
+  text_layer_init(&text_lower_time_layer, window.layer.frame);
+  text_layer_set_text_color(&text_lower_time_layer, GColorWhite);
+  text_layer_set_text_alignment(&text_lower_time_layer, GTextAlignmentCenter);
+  text_layer_set_background_color(&text_lower_time_layer, GColorClear);
+  layer_set_frame(&text_lower_time_layer.layer,
+		  GRect(LOWER_TIME_X, LOWER_TIME_Y, LOWER_TIME_WIDTH, LOWER_TIME_HEIGHT));
+  text_layer_set_font(&text_lower_time_layer,
+		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
+  layer_add_child(&window.layer, &text_lower_time_layer.layer);
 
   /* Line layer */
   /* layer_init(&line_layer, window.layer.frame); */
