@@ -30,27 +30,46 @@ Window window;
 #define SCREEN_MIDDLE_X 72 /* SCREEN_WIDTH / 2 */
 #define SCREEN_MIDDLE_Y 84 /* SCREEN_HEIGHT / 2 */
 
-#define DRAW_INSET 8
+#define DRAW_INSET 0
+#define DRAW_WIDTH 136 // SCREEN_WIDTH - DRAW_INSET
 
+#define SMALL_FONT_HEIGHT 21
+#define LARGE_FONT_HEIGHT 49
+#define FONT_PAD_Y 2
+
+// I think the drawing of text is smart enough to use the upper-left
+// corner of where you want to draw text and not the baseline.
 #define SCREEN_DATE_X DRAW_INSET
-#define SCREEN_DATE_Y 68
-#define SCREEN_DATE_WIDTH  136 /* 144-8 */
-#define SCREEN_DATE_HEIGHT 100 /* 168-68 */
+#define SCREEN_DATE_Y 3
+#define SCREEN_DATE_WIDTH  DRAW_WIDTH
+#define SCREEN_DATE_HEIGHT 23 // SMALL_FONT_HEIGHT + FONT_PAD_Y
 
 #define SCREEN_LINE_START_X DRAW_INSET
-#define SCREEN_LINE_END_X   131
-#define SCREEN_LINE_Y1 97
-#define SCREEN_LINE_Y2 98
+#define SCREEN_LINE_END_X   DRAW_WIDTH
+#define SCREEN_LINE_Y1 26 // SCREEN_DATE_Y + SCREEN_DATE_HEIGHT
+#define SCREEN_LINE_Y2 27 // SCREEN_LINE_Y1 + 1
 
 #define SCREEN_TIME_X DRAW_INSET
-#define SCREEN_TIME_Y 92
-#define SCREEN_TIME_WIDTH  137 /* 144 - 7 */
-#define SCREEN_TIME_HEIGHT 76 /* 168 - 92 */
+#define SCREEN_TIME_Y 59 // SCREEN_MIDDLE_Y - LARGE_FONT_HEIGHT/2
+#define SCREEN_TIME_WIDTH  DRAW_WIDTH
+#define SCREEN_TIME_HEIGHT 51 // LARGE_FONT_HEIGHT + FONT_PAD_Y
+
+#define LOWER_LINE_START_X DRAW_INSET
+#define LOWER_LINE_END_X   SCREEN_LINE_END_X
+#define LOWER_LINE_Y1 133 // LOWER_DATE_Y - (FONT_PAD_Y + 2)
+#define LOWER_LINE_Y2 134 // LOWER_LINE_Y2 + 1
+
+#define LOWER_DATE_X DRAW_INSET
+#define LOWER_DATE_Y 137 // SCREEN_HEIGHT - (SMALL_FONT_HEIGHT + FONT_PAD_Y + DRAW_INSET)
+#define LOWER_DATE_WIDTH  SCREEN_DATE_WIDTH
+#define LOWER_DATE_HEIGHT 31 // SMALL_FONT_HEIGHT + FONT_PAD_Y + DRAW_INSET
 
 TextLayer text_date_layer;
 TextLayer text_time_layer;
+TextLayer text_lower_date_layer;
 
 Layer line_layer;
+Layer lower_line_layer;
 
 
 void line_layer_update_callback(Layer* me, GContext* ctx) {
@@ -63,10 +82,21 @@ void line_layer_update_callback(Layer* me, GContext* ctx) {
 		     GPoint(SCREEN_LINE_END_X,   SCREEN_LINE_Y2));
 }
 
+void lower_line_update_callback(Layer* me, GContext* ctx) {
+  graphics_context_set_stroke_color(ctx, GColorWhite);
+  graphics_draw_line(ctx,
+		     GPoint(LOWER_LINE_START_X, LOWER_LINE_Y1),
+		     GPoint(LOWER_LINE_END_X,   LOWER_LINE_Y1));
+  graphics_draw_line(ctx,
+		     GPoint(LOWER_LINE_START_X, LOWER_LINE_Y2),
+		     GPoint(LOWER_LINE_END_X,   LOWER_LINE_Y2));
+}
+
 void draw_screen(AppContextRef ctx, PblTm* ptime) {
   // Need to be static because they're used by the system later.
-  static char time_text[] = "00:00";
-  static char date_text[] = "Xxx Xxx 00"; // Tue Oct 02
+  static char time_text[]  = "00:00";
+  static char date_text[]  = "Xxx Xxx 00"; // Tue Oct 02
+  static char lower_date[] = "0000-00-00"; // 2013-10-02
 
   static bool  last_time_saved = false;
   static PblTm last_time;
@@ -77,6 +107,9 @@ void draw_screen(AppContextRef ctx, PblTm* ptime) {
   if (!last_time_saved || (last_time_saved && (ptime->tm_mday != last_time.tm_mday))) {
 	  string_format_time(date_text, sizeof(date_text), "%a %b %d", ptime);
 	  text_layer_set_text(&text_date_layer, date_text);
+
+	  string_format_time(lower_date, sizeof(lower_date), "%Y-%m-%d", ptime);
+	  text_layer_set_text(&text_lower_date_layer, lower_date);
   }
 
   // Time string: always set since we're called at init time or when the minute changes.
@@ -110,6 +143,7 @@ void handle_init(AppContextRef ctx) {
 
   /* Date layer */
   text_layer_init(&text_date_layer, window.layer.frame);
+  text_layer_set_text_alignment(&text_date_layer, GTextAlignmentCenter);
   text_layer_set_text_color(&text_date_layer, GColorWhite);
   text_layer_set_background_color(&text_date_layer, GColorClear);
   layer_set_frame(&text_date_layer.layer,
@@ -121,6 +155,7 @@ void handle_init(AppContextRef ctx) {
 
   /* Time layer */
   text_layer_init(&text_time_layer, window.layer.frame);
+  text_layer_set_text_alignment(&text_time_layer, GTextAlignmentCenter);
   text_layer_set_text_color(&text_time_layer, GColorWhite);
   text_layer_set_background_color(&text_time_layer, GColorClear);
   layer_set_frame(&text_time_layer.layer,
@@ -130,10 +165,26 @@ void handle_init(AppContextRef ctx) {
 		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_B_SUBSET_49)));
   layer_add_child(&window.layer, &text_time_layer.layer);
 
+  // Lower date layer
+  text_layer_init(&text_lower_date_layer, window.layer.frame);
+  text_layer_set_text_color(&text_lower_date_layer, GColorWhite);
+  text_layer_set_text_alignment(&text_lower_date_layer, GTextAlignmentCenter);
+  text_layer_set_background_color(&text_lower_date_layer, GColorClear);
+  layer_set_frame(&text_lower_date_layer.layer,
+		  GRect(LOWER_DATE_X, LOWER_DATE_Y, LOWER_DATE_WIDTH, LOWER_DATE_HEIGHT));
+  text_layer_set_font(&text_lower_date_layer,
+		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
+  layer_add_child(&window.layer, &text_lower_date_layer.layer);
+
   /* Line layer */
-  layer_init(&line_layer, window.layer.frame);
-  line_layer.update_proc = &line_layer_update_callback;
-  layer_add_child(&window.layer, &line_layer);
+  /* layer_init(&line_layer, window.layer.frame); */
+  /* line_layer.update_proc = &line_layer_update_callback; */
+  /* layer_add_child(&window.layer, &line_layer); */
+
+  // Lower line layer
+  /* layer_init(&lower_line_layer, window.layer.frame); */
+  /* lower_line_layer.update_proc = &lower_line_update_callback; */
+  /* layer_add_child(&window.layer, &lower_line_layer); */
 
 /*
 	text_layer_init(&hello_layer, GRect(0, 65, 144, 30));
