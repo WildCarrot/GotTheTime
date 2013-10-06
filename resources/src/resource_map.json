@@ -1,0 +1,33 @@
+
+{"friendlyVersion": "1.0",
+ "versionDefName": "GOT_THE_TIME_RESOURCES",
+ "media": [
+	   {
+	    "type":"font",
+	    "defName":"FONT_ANONYMOUS_PRO_21",
+	    "file":"fonts/Anonymous-Pro.ttf"
+	   },
+
+	   {
+	    "type":"font",
+	    "defName":"FONT_ANONYMOUS_PRO_B_SUBSET_49",
+	    "characterRegex":"[:0-9]",
+	    "file":"fonts/Anonymous-Pro-B.ttf"
+	   },
+
+	   {
+	    "type":"font",
+	    "defName":"FONT_UBUNTU_21",
+	    "file":"fonts/Ubuntu-R.ttf"
+	   },
+
+	   {
+	    "type":"font",
+	    "defName":"FONT_UBUNTU_B_SUBSET_49",
+	    "characterRegex":"[:0-9]",
+	    "file":"fonts/Ubuntu-B.ttf"
+	   }
+
+
+	  ]
+}
