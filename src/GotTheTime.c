@@ -1,3 +1,24 @@
+/*
+Watch face with date and time like I like them.
+General layout is below (not to scale).
+
++------------+
+|   Sunday   |
+| 2013-10-06 |
+|            |
+|   09:23    | <<< big font
+|            |
++------------+
+
+Vibrate on the hour, when enabled.
+
+Used "Simplicity" watchface as a guide, but I want the day of the week.
+Also, I eventually want to add number of meetings or timezone info.
+
+TODO: when in 12-hour mode, put the AM/PM below the main time text
+MAYBE: add fuzzy text below the time?
+ */
+
 #include "pebble_os.h"
 #include "pebble_app.h"
 #include "pebble_fonts.h"
@@ -9,20 +30,6 @@ PBL_APP_INFO(MY_UUID,
              DEFAULT_MENU_ICON,
              APP_INFO_WATCH_FACE);
 
-/*
-Watch face with date and time like I like them.
-Window is 144x98 (?) (not to scale below)
-+-----------+
-| Tue Oct 2 |
-| --------- |
-|   09:23   |
-+-----------+
-
-Used "Simplicity" watchface as a guide, but I want the day of the week.
-Also, I eventually want to add number of meetings or timezone info.
- */
-
-Window window;
 /* Seems like these should be defined somewhere. */
 #define SCREEN_WIDTH  144
 #define SCREEN_HEIGHT 168
@@ -60,9 +67,13 @@ Window window;
 #define LOWER_LINE_Y2 134 // LOWER_LINE_Y2 + 1
 
 #define LOWER_DATE_X DRAW_INSET
-#define LOWER_DATE_Y 137 // SCREEN_HEIGHT - (SMALL_FONT_HEIGHT + FONT_PAD_Y + DRAW_INSET)
+#define LOWER_DATE_Y 26 // SCREEN_DATE_Y + SCREEN_DATE_HEIGHT
 #define LOWER_DATE_WIDTH  SCREEN_DATE_WIDTH
 #define LOWER_DATE_HEIGHT 31 // SMALL_FONT_HEIGHT + FONT_PAD_Y + DRAW_INSET
+
+#define VIBRATE_HOURLY 1 // Change to 0 to disable
+
+Window window;
 
 TextLayer text_date_layer;
 TextLayer text_time_layer;
@@ -71,6 +82,10 @@ TextLayer text_lower_date_layer;
 Layer line_layer;
 Layer lower_line_layer;
 
+const VibePattern HOUR_VIBE_PATTERN = {
+  .durations = (uint32_t []) {50, 200, 50, 200},
+  .num_segments = 4
+};
 
 void line_layer_update_callback(Layer* me, GContext* ctx) {
   graphics_context_set_stroke_color(ctx, GColorWhite);
@@ -95,7 +110,7 @@ void lower_line_update_callback(Layer* me, GContext* ctx) {
 void draw_screen(AppContextRef ctx, PblTm* ptime) {
   // Need to be static because they're used by the system later.
   static char time_text[]  = "00:00";
-  static char date_text[]  = "Xxx Xxx 00"; // Tue Oct 02
+  static char date_text[]  = "Xxxxxxxxxx"; // Sunday
   static char lower_date[] = "0000-00-00"; // 2013-10-02
 
   static bool  last_time_saved = false;
@@ -105,7 +120,7 @@ void draw_screen(AppContextRef ctx, PblTm* ptime) {
 
   // Date string: set the text if we've never set it before or if it changed.
   if (!last_time_saved || (last_time_saved && (ptime->tm_mday != last_time.tm_mday))) {
-	  string_format_time(date_text, sizeof(date_text), "%a %b %d", ptime);
+	  string_format_time(date_text, sizeof(date_text), "%A", ptime);
 	  text_layer_set_text(&text_date_layer, date_text);
 
 	  string_format_time(lower_date, sizeof(lower_date), "%Y-%m-%d", ptime);
@@ -119,6 +134,10 @@ void draw_screen(AppContextRef ctx, PblTm* ptime) {
     time_format = "%I:%M";
   }
   string_format_time(time_text, sizeof(time_text), time_format, ptime);
+
+  if (VIBRATE_HOURLY && (ptime->tm_min == 0)) {
+    vibes_enqueue_custom_pattern(HOUR_VIBE_PATTERN);
+  }
 
   // Remove the leading zero for 12-hour clocks.
   // Only needed because there's no non-padded hour format string.
