@@ -10,12 +10,11 @@ General layout is below (not to scale).
 |            |
 +------------+
 
-Vibrate on the hour, when enabled.
+Vibrate on the hour, when enabled.  (Enabled by default.)
 
 Used "Simplicity" watchface as a guide, but I want the day of the week.
 Also, I eventually want to add number of meetings or timezone info.
 
-TODO: when in 12-hour mode, put the AM/PM below the main time text
 MAYBE: add fuzzy text below the time?
  */
 
@@ -51,20 +50,10 @@ PBL_APP_INFO(MY_UUID,
 #define SCREEN_DATE_WIDTH  DRAW_WIDTH
 #define SCREEN_DATE_HEIGHT 26 // SMALL_FONT_HEIGHT + FONT_PAD_Y + 4 to make room for descent of "y" in "Thursday"
 
-#define SCREEN_LINE_START_X DRAW_INSET
-#define SCREEN_LINE_END_X   DRAW_WIDTH
-#define SCREEN_LINE_Y1 26 // SCREEN_DATE_Y + SCREEN_DATE_HEIGHT
-#define SCREEN_LINE_Y2 27 // SCREEN_LINE_Y1 + 1
-
 #define SCREEN_TIME_X DRAW_INSET
 #define SCREEN_TIME_Y 59 // SCREEN_MIDDLE_Y - LARGE_FONT_HEIGHT/2
 #define SCREEN_TIME_WIDTH  DRAW_WIDTH
 #define SCREEN_TIME_HEIGHT 51 // LARGE_FONT_HEIGHT + FONT_PAD_Y
-
-#define LOWER_LINE_START_X DRAW_INSET
-#define LOWER_LINE_END_X   SCREEN_LINE_END_X
-#define LOWER_LINE_Y1 133 // LOWER_DATE_Y - (FONT_PAD_Y + 2)
-#define LOWER_LINE_Y2 134 // LOWER_LINE_Y2 + 1
 
 #define LOWER_DATE_X DRAW_INSET
 #define LOWER_DATE_Y 28 // SCREEN_DATE_Y + SCREEN_DATE_HEIGHT
@@ -92,26 +81,6 @@ const VibePattern HOUR_VIBE_PATTERN = {
   .durations = (uint32_t []) {50, 200, 50, 200, 50, 200},
   .num_segments = 4
 };
-
-void line_layer_update_callback(Layer* me, GContext* ctx) {
-  graphics_context_set_stroke_color(ctx, GColorWhite);
-  graphics_draw_line(ctx,
-		     GPoint(SCREEN_LINE_START_X, SCREEN_LINE_Y1),
-		     GPoint(SCREEN_LINE_END_X,   SCREEN_LINE_Y1));
-  graphics_draw_line(ctx,
-		     GPoint(SCREEN_LINE_START_X, SCREEN_LINE_Y2),
-		     GPoint(SCREEN_LINE_END_X,   SCREEN_LINE_Y2));
-}
-
-void lower_line_update_callback(Layer* me, GContext* ctx) {
-  graphics_context_set_stroke_color(ctx, GColorWhite);
-  graphics_draw_line(ctx,
-		     GPoint(LOWER_LINE_START_X, LOWER_LINE_Y1),
-		     GPoint(LOWER_LINE_END_X,   LOWER_LINE_Y1));
-  graphics_draw_line(ctx,
-		     GPoint(LOWER_LINE_START_X, LOWER_LINE_Y2),
-		     GPoint(LOWER_LINE_END_X,   LOWER_LINE_Y2));
-}
 
 void draw_screen(AppContextRef ctx, PblTm* ptime) {
   // Need to be static because they're used by the system later.
@@ -179,7 +148,6 @@ void handle_init(AppContextRef ctx) {
   layer_set_frame(&text_date_layer.layer,
 		  GRect(SCREEN_DATE_X, SCREEN_DATE_Y, SCREEN_DATE_WIDTH, SCREEN_DATE_HEIGHT));
   text_layer_set_font(&text_date_layer,
-//		      fonts_get_system_font(FONT_KEY_ROBOTO_CONDENSED_21));
 		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
   layer_add_child(&window.layer, &text_date_layer.layer);
 
@@ -191,7 +159,6 @@ void handle_init(AppContextRef ctx) {
   layer_set_frame(&text_time_layer.layer,
 		  GRect(SCREEN_TIME_X, SCREEN_TIME_Y, SCREEN_TIME_WIDTH, SCREEN_TIME_HEIGHT));
   text_layer_set_font(&text_time_layer,
-//		      fonts_get_system_font(FONT_KEY_ROBOTO_BOLD_SUBSET_49));
 		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_B_SUBSET_49)));
   layer_add_child(&window.layer, &text_time_layer.layer);
 
@@ -217,23 +184,6 @@ void handle_init(AppContextRef ctx) {
 		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
   layer_add_child(&window.layer, &text_lower_time_layer.layer);
 
-  /* Line layer */
-  /* layer_init(&line_layer, window.layer.frame); */
-  /* line_layer.update_proc = &line_layer_update_callback; */
-  /* layer_add_child(&window.layer, &line_layer); */
-
-  // Lower line layer
-  /* layer_init(&lower_line_layer, window.layer.frame); */
-  /* lower_line_layer.update_proc = &lower_line_update_callback; */
-  /* layer_add_child(&window.layer, &lower_line_layer); */
-
-/*
-	text_layer_init(&hello_layer, GRect(0, 65, 144, 30));
-	text_layer_set_text_alignment(&hello_layer, GTextAlignmentCenter);
-	text_layer_set_text(&hello_layer, "Hello, World!");
-	text_layer_set_font(&hello_layer, fonts_get_system_font(FONT_KEY_ROBOTO_CONDENSED_21));
-	layer_add_child(&window.layer, &hello_layer.layer);
-*/
   // Update here to avoid blank display on launch
   PblTm curr_time;
   get_time(&curr_time);
