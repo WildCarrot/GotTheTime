@@ -27,7 +27,7 @@ MAYBE: add fuzzy text below the time?
 PBL_APP_INFO(MY_UUID,
              "GotTheTime Watchface", "Build Something Awesome",
              1, 0, /* App version */
-             DEFAULT_MENU_ICON,
+             RESOURCE_ID_IMAGE_MENU_ICON,
              APP_INFO_WATCH_FACE);
 
 /* Seems like these should be defined somewhere. */
@@ -49,7 +49,7 @@ PBL_APP_INFO(MY_UUID,
 #define SCREEN_DATE_X DRAW_INSET
 #define SCREEN_DATE_Y 3
 #define SCREEN_DATE_WIDTH  DRAW_WIDTH
-#define SCREEN_DATE_HEIGHT 23 // SMALL_FONT_HEIGHT + FONT_PAD_Y
+#define SCREEN_DATE_HEIGHT 26 // SMALL_FONT_HEIGHT + FONT_PAD_Y + 4 to make room for descent of "y" in "Thursday"
 
 #define SCREEN_LINE_START_X DRAW_INSET
 #define SCREEN_LINE_END_X   DRAW_WIDTH
@@ -67,9 +67,9 @@ PBL_APP_INFO(MY_UUID,
 #define LOWER_LINE_Y2 134 // LOWER_LINE_Y2 + 1
 
 #define LOWER_DATE_X DRAW_INSET
-#define LOWER_DATE_Y 26 // SCREEN_DATE_Y + SCREEN_DATE_HEIGHT
+#define LOWER_DATE_Y 28 // SCREEN_DATE_Y + SCREEN_DATE_HEIGHT
 #define LOWER_DATE_WIDTH  SCREEN_DATE_WIDTH
-#define LOWER_DATE_HEIGHT 31 // SMALL_FONT_HEIGHT + FONT_PAD_Y + DRAW_INSET
+#define LOWER_DATE_HEIGHT 31 // SMALL_FONT_HEIGHT + FONT_PAD_Y
 
 #define LOWER_TIME_X DRAW_INSET
 #define LOWER_TIME_Y 112 // SCREEN_TIME_Y + SCREEN_TIME_HEIGHT + FONT_PAD_Y
@@ -89,7 +89,7 @@ Layer line_layer;
 Layer lower_line_layer;
 
 const VibePattern HOUR_VIBE_PATTERN = {
-  .durations = (uint32_t []) {50, 100, 50, 100},
+  .durations = (uint32_t []) {50, 200, 50, 200, 50, 200},
   .num_segments = 4
 };
 

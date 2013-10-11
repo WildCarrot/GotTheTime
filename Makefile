@@ -1,7 +1,7 @@
 all: build serve
 	echo "Done!"
 
-build:
+build: src/GotTheTime.c
 	./waf build
 
 serve:
