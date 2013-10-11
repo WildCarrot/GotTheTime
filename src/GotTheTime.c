@@ -79,7 +79,7 @@ Layer lower_line_layer;
 
 const VibePattern HOUR_VIBE_PATTERN = {
   .durations = (uint32_t []) {50, 200, 50, 200, 50, 200},
-  .num_segments = 4
+  .num_segments = 6
 };
 
 void draw_screen(AppContextRef ctx, PblTm* ptime) {
