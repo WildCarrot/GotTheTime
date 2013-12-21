@@ -7,7 +7,8 @@ General layout is below (not to scale).
 | 2013-10-06 |
 |            |
 |   09:23    | <<< big font
-|            |
+|     59     |
+|     AM     | <<< only in 12-hour mode
 +------------+
 
 Vibrate on the hour, when enabled.  (Enabled by default.)
@@ -15,8 +16,7 @@ Vibrate on the hour, when enabled.  (Enabled by default.)
 Used "Simplicity" watchface as a guide, but I want the day of the week.
 Also, I eventually want to add number of meetings or timezone info.
 
-MAYBE: add fuzzy text below the time?
- */
+*/
 
 #include "pebble_os.h"
 #include "pebble_app.h"
@@ -73,9 +73,6 @@ TextLayer text_date_layer;
 TextLayer text_time_layer;
 TextLayer text_lower_date_layer;
 TextLayer text_lower_time_layer;
-
-Layer line_layer;
-Layer lower_line_layer;
 
 const VibePattern HOUR_VIBE_PATTERN = {
   .durations = (uint32_t []) {50, 200, 50, 200, 50, 200},
