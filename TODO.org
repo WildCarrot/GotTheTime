@@ -1,0 +1,9 @@
+TODOs for my watch face
+
+Anytime
+* TODO Add seconds display
+
+2.0 SDK
+* TODO Add pebble battery percent
+* TODO Add indicator (reverse video?) when not connected to phone via bluetooth
+
