@@ -1,0 +1,33 @@
+{
+  "uuid": "c5cec51c-276b-44ba-ae22-580e74a5ad21",
+  "shortName": "GotTheTime",
+  "longName": "GotTheTime Watchface",
+  "companyName": "Build Something Awesome",
+  "versionCode": 2,
+  "versionLabel": "1.1.0",
+  "watchapp": {
+    "watchface": true
+  },
+  "appKeys": {},
+  "resources": {
+    "media": [
+      {
+        "menuIcon": true,
+        "type": "png",
+        "name": "IMAGE_MENU_ICON",
+        "file": "images/menu_icon_gotthetime.png"
+      },
+      {
+        "type": "font",
+        "name": "FONT_UBUNTU_21",
+        "file": "fonts/Ubuntu-R.ttf"
+      },
+      {
+        "characterRegex": "[:0-9]",
+        "type": "font",
+        "name": "FONT_UBUNTU_B_SUBSET_49",
+        "file": "fonts/Ubuntu-B.ttf"
+      }
+    ]
+  }
+}
