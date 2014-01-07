@@ -7,7 +7,7 @@ General layout is below (not to scale).
 | 2013-10-06 |
 |            |
 |   09:23    | <<< big font
-|     59     |
+|     59     | <<< TODO: not yet added
 |     AM     | <<< only in 12-hour mode
 +------------+
 
@@ -18,16 +18,8 @@ Also, I eventually want to add number of meetings or timezone info.
 
 */
 
-#include "pebble_os.h"
-#include "pebble_app.h"
-#include "pebble_fonts.h"
-
-#define MY_UUID { 0xC5, 0xCE, 0xC5, 0x1C, 0x27, 0x6B, 0x44, 0xBA, 0xAE, 0x22, 0x58, 0x0E, 0x74, 0xA5, 0xAD, 0x21 }
-PBL_APP_INFO(MY_UUID,
-             "GotTheTime Watchface", "Build Something Awesome",
-             1, 0, /* App version */
-             RESOURCE_ID_IMAGE_MENU_ICON,
-             APP_INFO_WATCH_FACE);
+#include <pebble.h>
+#include <time.h>
 
 /* Seems like these should be defined somewhere. */
 #define SCREEN_WIDTH  144
@@ -67,141 +59,173 @@ PBL_APP_INFO(MY_UUID,
 
 #define VIBRATE_HOURLY 1 // Change to 0 to disable
 
-Window window;
+#define ALL_TIME_CHANGED (SECOND_UNIT | MINUTE_UNIT | HOUR_UNIT | DAY_UNIT | MONTH_UNIT | YEAR_UNIT)
 
-TextLayer text_date_layer;
-TextLayer text_time_layer;
-TextLayer text_lower_date_layer;
-TextLayer text_lower_time_layer;
+Window* window;
+
+TextLayer* text_date_layer;
+TextLayer* text_time_layer;
+TextLayer* text_lower_date_layer;
+TextLayer* text_lower_time_layer;
 
 const VibePattern HOUR_VIBE_PATTERN = {
   .durations = (uint32_t []) {50, 200, 50, 200, 50, 200},
   .num_segments = 6
 };
 
-void draw_screen(AppContextRef ctx, PblTm* ptime) {
-  // Need to be static because they're used by the system later.
-  static char time_text[]  = "00:00";
-  static char date_text[]  = "Xxxxxxxxxx"; // Sunday
-  static char lower_date[] = "0000-00-00"; // 2013-10-02
-  static char lower_time[] = "XX"; // AM
+void draw_screen(struct tm* ptime, TimeUnits units_changed) {
+	// Buffers we can format text into.
+	// Need to be static because they're used by the text layers
+	// even after this function completes.
+	static char time_text[]  = "00:00";
+	static char date_text[]  = "Xxxxxxxxxx"; // Wednesday
+	static char lower_date[] = "0000-00-00"; // 2013-10-02
+	static char lower_time[] = "XX"; // AM
 
-  static bool  last_time_saved = false;
-  static PblTm last_time;
+	char *time_format;
 
-  char *time_format;
+	// If the month or year changes, the day will change, too.
+	if (units_changed & DAY_UNIT) {
+		// Day of the week, full name
+		strftime(date_text, sizeof(date_text), "%A", ptime);
+		text_layer_set_text(text_date_layer, date_text);
 
-  // Date string: set the text if we've never set it before or if it changed.
-  if (!last_time_saved || (last_time_saved && (ptime->tm_mday != last_time.tm_mday))) {
-	  string_format_time(date_text, sizeof(date_text), "%A", ptime);
-	  text_layer_set_text(&text_date_layer, date_text);
+		// Date
+		strftime(lower_date, sizeof(lower_date), "%Y-%m-%d", ptime);
+		text_layer_set_text(text_lower_date_layer, lower_date);
+	}
 
-	  string_format_time(lower_date, sizeof(lower_date), "%Y-%m-%d", ptime);
-	  text_layer_set_text(&text_lower_date_layer, lower_date);
-  }
+	// Time string: always set since we're called at init time or when the minute changes.
+	if (clock_is_24h_style()) {
+		time_format = "%R";
+	} else {
+		// This includes a leading zero.
+		// The format without a leading zero ("%l")
+		// includes a leading space.  We want neither,
+		// so remove the zero after formatting the text.
+		time_format = "%I:%M";
+	}
+	strftime(time_text, sizeof(time_text), time_format, ptime);
 
-  // Time string: always set since we're called at init time or when the minute changes.
-  if (clock_is_24h_style()) {
-    time_format = "%R";
-  } else {
-    time_format = "%I:%M";
-  }
-  string_format_time(time_text, sizeof(time_text), time_format, ptime);
+	// Hack to remove a leading zero or space for 12-hour times.
+	if (!clock_is_24h_style()) {
+		memmove(time_text, &time_text[1], sizeof(time_text) - 1);
+	}
 
-  if (VIBRATE_HOURLY && (ptime->tm_min == 0)) {
-    vibes_enqueue_custom_pattern(HOUR_VIBE_PATTERN);
-  }
+	text_layer_set_text(text_time_layer, time_text);
 
-  // Remove the leading zero for 12-hour clocks.
-  // Only needed because there's no non-padded hour format string.
-  if (!clock_is_24h_style()) {
-    if (time_text[0] == '0') {
-      memmove(time_text, &time_text[1], sizeof(time_text) - 1);
-    }
-    string_format_time(lower_time, sizeof(lower_time), "%p", ptime);
-    text_layer_set_text(&text_lower_time_layer, lower_time);
-  }
+	if (VIBRATE_HOURLY && (units_changed & HOUR_UNIT)) {
+		// The very first time we draw the screen,
+		// the hours will have "changed".
+		// Don't vibe in that case, only when the minutes are zero.
+		if (ptime->tm_min == 0) {
+			vibes_enqueue_custom_pattern(HOUR_VIBE_PATTERN);
+		}
+	}
 
-  text_layer_set_text(&text_time_layer, time_text);
-
-  // Save the latest date/time.
-  last_time_saved = true;
-  last_time = *ptime;
+	// Set the AM/PM, if needed.
+	if (!clock_is_24h_style()) {
+		strftime(lower_time, sizeof(lower_time), "%p", ptime);
+		text_layer_set_text(text_lower_time_layer, lower_time);
+	}
 }
 
-void handle_init(AppContextRef ctx) {
-  window_init(&window, "GotTheTime");
-  window_stack_push(&window, true /* Animated */);
-  window_set_background_color(&window, GColorBlack);
+static void window_load(Window* win) {
+	// XXX TODO Base width/height on actual frame bounds.
+	// Eg bounds.size.w for width of frame
 
-  // Load the custom fonts.
-  resource_init_current_app(&GOT_THE_TIME_RESOURCES);
+	// Date layer
+	text_date_layer = text_layer_create((GRect) { .origin = { SCREEN_DATE_X, SCREEN_DATE_Y },
+				.size = { SCREEN_DATE_WIDTH, SCREEN_DATE_HEIGHT } });
+	text_layer_set_text_alignment(text_date_layer, GTextAlignmentCenter);
+	text_layer_set_text_color(text_date_layer, GColorWhite);
+	text_layer_set_background_color(text_date_layer, GColorClear);
+	text_layer_set_font(text_date_layer,
+			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
+	layer_add_child(window_get_root_layer(win),
+			text_layer_get_layer(text_date_layer));
 
-  /* Date layer */
-  text_layer_init(&text_date_layer, window.layer.frame);
-  text_layer_set_text_alignment(&text_date_layer, GTextAlignmentCenter);
-  text_layer_set_text_color(&text_date_layer, GColorWhite);
-  text_layer_set_background_color(&text_date_layer, GColorClear);
-  layer_set_frame(&text_date_layer.layer,
-		  GRect(SCREEN_DATE_X, SCREEN_DATE_Y, SCREEN_DATE_WIDTH, SCREEN_DATE_HEIGHT));
-  text_layer_set_font(&text_date_layer,
-		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
-  layer_add_child(&window.layer, &text_date_layer.layer);
+	// Time layer
+	text_time_layer = text_layer_create((GRect) { .origin = { SCREEN_TIME_X, SCREEN_TIME_Y },
+				.size = { SCREEN_TIME_WIDTH, SCREEN_TIME_HEIGHT } });
+	text_layer_set_text_alignment(text_time_layer, GTextAlignmentCenter);
+	text_layer_set_text_color(text_time_layer, GColorWhite);
+	text_layer_set_background_color(text_time_layer, GColorClear);
+	text_layer_set_font(text_time_layer,
+			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_B_SUBSET_49)));
+	layer_add_child(window_get_root_layer(win),
+			text_layer_get_layer(text_time_layer));
 
-  /* Time layer */
-  text_layer_init(&text_time_layer, window.layer.frame);
-  text_layer_set_text_alignment(&text_time_layer, GTextAlignmentCenter);
-  text_layer_set_text_color(&text_time_layer, GColorWhite);
-  text_layer_set_background_color(&text_time_layer, GColorClear);
-  layer_set_frame(&text_time_layer.layer,
-		  GRect(SCREEN_TIME_X, SCREEN_TIME_Y, SCREEN_TIME_WIDTH, SCREEN_TIME_HEIGHT));
-  text_layer_set_font(&text_time_layer,
-		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_B_SUBSET_49)));
-  layer_add_child(&window.layer, &text_time_layer.layer);
+	// Lower date layer
+	text_lower_date_layer = text_layer_create((GRect) { .origin = { LOWER_DATE_X, LOWER_DATE_Y },
+				.size = { LOWER_DATE_WIDTH, LOWER_DATE_HEIGHT } });
+	text_layer_set_text_color(text_lower_date_layer, GColorWhite);
+	text_layer_set_text_alignment(text_lower_date_layer, GTextAlignmentCenter);
+	text_layer_set_background_color(text_lower_date_layer, GColorClear);
+	text_layer_set_font(text_lower_date_layer,
+			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
+	layer_add_child(window_get_root_layer(win),
+			text_layer_get_layer(text_lower_date_layer));
 
-  // Lower date layer
-  text_layer_init(&text_lower_date_layer, window.layer.frame);
-  text_layer_set_text_color(&text_lower_date_layer, GColorWhite);
-  text_layer_set_text_alignment(&text_lower_date_layer, GTextAlignmentCenter);
-  text_layer_set_background_color(&text_lower_date_layer, GColorClear);
-  layer_set_frame(&text_lower_date_layer.layer,
-		  GRect(LOWER_DATE_X, LOWER_DATE_Y, LOWER_DATE_WIDTH, LOWER_DATE_HEIGHT));
-  text_layer_set_font(&text_lower_date_layer,
-		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
-  layer_add_child(&window.layer, &text_lower_date_layer.layer);
-
-  // Lower text layer
-  text_layer_init(&text_lower_time_layer, window.layer.frame);
-  text_layer_set_text_color(&text_lower_time_layer, GColorWhite);
-  text_layer_set_text_alignment(&text_lower_time_layer, GTextAlignmentCenter);
-  text_layer_set_background_color(&text_lower_time_layer, GColorClear);
-  layer_set_frame(&text_lower_time_layer.layer,
-		  GRect(LOWER_TIME_X, LOWER_TIME_Y, LOWER_TIME_WIDTH, LOWER_TIME_HEIGHT));
-  text_layer_set_font(&text_lower_time_layer,
-		      fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
-  layer_add_child(&window.layer, &text_lower_time_layer.layer);
-
-  // Update here to avoid blank display on launch
-  PblTm curr_time;
-  get_time(&curr_time);
-  draw_screen(ctx, &curr_time);
+	// Lower text layer
+	text_lower_time_layer = text_layer_create((GRect) { .origin = { LOWER_TIME_X, LOWER_TIME_Y },
+				.size = { LOWER_TIME_WIDTH, LOWER_TIME_HEIGHT } });
+	text_layer_set_text_color(text_lower_time_layer, GColorWhite);
+	text_layer_set_text_alignment(text_lower_time_layer, GTextAlignmentCenter);
+	text_layer_set_background_color(text_lower_time_layer, GColorClear);
+	text_layer_set_font(text_lower_time_layer,
+			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
+	layer_add_child(window_get_root_layer(win),
+			text_layer_get_layer(text_lower_time_layer));
 }
 
-
-void handle_minute_tick(AppContextRef ctx, PebbleTickEvent* t) {
-  draw_screen(ctx, t->tick_time);
+static void window_appear(Window* win) {
+	// Update here to avoid blank display on launch
+	// and to update when the window is redrawn.
+	time_t now = time(NULL);
+	struct tm* curr_time = localtime(&now);
+	draw_screen(curr_time, ALL_TIME_CHANGED);
+	free(curr_time);
 }
 
+static void window_unload(Window *win) {
+	text_layer_destroy(text_lower_time_layer);
+	text_layer_destroy(text_lower_date_layer);
+	text_layer_destroy(text_time_layer);
+	text_layer_destroy(text_date_layer);
+}
 
-void pbl_main(void *params) {
-  PebbleAppHandlers handlers = {
-    .init_handler = &handle_init,
+void handle_minute_tick(struct tm* tick_time, TimeUnits units_changed) {
+	draw_screen(tick_time, units_changed);
+}
 
-    .tick_info = {
-      .tick_handler = &handle_minute_tick,
-      .tick_units   = MINUTE_UNIT
-    }
-  };
+void handle_init() {
+	window = window_create();
+	window_set_window_handlers(window, (WindowHandlers) {
+				.load = window_load,
+				.appear = window_appear,
+			  	.unload = window_unload,
+			  });
+	window_stack_push(window, true /* Animated */);
+	window_set_background_color(window, GColorBlack);
 
-  app_event_loop(params, &handlers);
+	tick_timer_service_subscribe(MINUTE_UNIT, &handle_minute_tick);
+}
+
+void handle_deinit(void) {
+	tick_timer_service_unsubscribe();
+
+	// XXX TODO Release other layers?
+	//window_unload(window) should have been called to destroy layers?
+	window_destroy(window);
+}
+
+int main(void) {
+	handle_init();
+
+	app_event_loop();
+
+	handle_deinit();
+
+	return 0;
 }
