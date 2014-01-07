@@ -3,8 +3,8 @@
   "shortName": "GotTheTime",
   "longName": "GotTheTime Watchface",
   "companyName": "Build Something Awesome",
-  "versionCode": 2,
-  "versionLabel": "1.1.0",
+  "versionCode": 3,
+  "versionLabel": "1.2.0",
   "watchapp": {
     "watchface": true
   },

@@ -1,9 +1,17 @@
 TODOs for my watch face
 
 Anytime
-* TODO Add seconds display
+* TODO Add seconds display (small and to the right of AM/PM?)
+
 
 2.0 SDK
 * TODO Add pebble battery percent
+** DONE Smaller font
+   CLOSED: [2014-01-07 Tue 11:06]
+   :LOGBOOK:
+   - State "DONE"       from "TODO"       [2014-01-07 Tue 11:06]
+   :END:
+** TODO Graphic for battery, rather than text
 * TODO Add indicator (reverse video?) when not connected to phone via bluetooth
+* TODO Add number of meetings or timezone
 

@@ -82,6 +82,9 @@ TextLayer* text_lower_date_layer;
 TextLayer* text_lower_time_layer;
 TextLayer* text_battery_layer;
 
+GFont font_21;
+GFont font_49_numbers;
+
 const VibePattern HOUR_VIBE_PATTERN = {
   .durations = (uint32_t []) {50, 200, 50, 200, 50, 200},
   .num_segments = 6
@@ -96,7 +99,7 @@ void draw_screen(struct tm* ptime, TimeUnits units_changed,
 	static char date_text[]  = "Xxxxxxxxxx"; // Wednesday
 	static char lower_date[] = "0000-00-00"; // 2013-10-02
 	static char lower_time[] = "XX"; // AM
-	static char battery_text[] = "w: 000%"; // 0% - 100%
+	static char battery_text[] = "w: 000% c"; // 0% - 100% c for "charging"
 
 	char *time_format;
 
@@ -147,9 +150,11 @@ void draw_screen(struct tm* ptime, TimeUnits units_changed,
 
 	// Update the battery text, if it changed.
 	// XXX Change from text to a drawing!
-	//APP_LOG(APP_LOG_LEVEL_DEBUG, "battery_changed=%x percent=%d %s\n", battery_changed, charge_state.charge_percent, battery_text);
-	if (battery_changed & CHARGE_PERCENT_FIELD) {
-		snprintf(battery_text, sizeof(battery_text), "w: %3d%%", charge_state.charge_percent);
+	//APP_LOG(APP_LOG_LEVEL_DEBUG, "battery_changed=%x percent=%d %s charging?=%d\n", battery_changed, charge_state.charge_percent, battery_text, charge_state.is_charging);
+	if ((battery_changed & CHARGE_PERCENT_FIELD) ||
+	    (battery_changed & IS_CHARGING_FIELD)) {
+		snprintf(battery_text, sizeof(battery_text), "w: %3d%% %c", charge_state.charge_percent,
+			 ((battery_changed & IS_CHARGING_FIELD) && charge_state.is_charging)? 'c': ' ');
 	}
 	// XXX If drawing the other fields (charging/plugged), test and draw those.
 	if (battery_changed) {
@@ -168,8 +173,8 @@ static void window_load(Window* win) {
 	text_layer_set_text_alignment(text_date_layer, GTextAlignmentCenter);
 	text_layer_set_text_color(text_date_layer, GColorWhite);
 	text_layer_set_background_color(text_date_layer, GColorClear);
-	text_layer_set_font(text_date_layer,
-			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
+	//text_layer_set_font(text_date_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
+	text_layer_set_font(text_date_layer, font_21);
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_date_layer));
 
@@ -179,8 +184,8 @@ static void window_load(Window* win) {
 	text_layer_set_text_alignment(text_time_layer, GTextAlignmentCenter);
 	text_layer_set_text_color(text_time_layer, GColorWhite);
 	text_layer_set_background_color(text_time_layer, GColorClear);
-	text_layer_set_font(text_time_layer,
-			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_B_SUBSET_49)));
+//	text_layer_set_font(text_time_layer, fonts_get_system_font(FONT_KEY_ROBOTO_BOLD_SUBSET_49));
+	text_layer_set_font(text_time_layer, font_49_numbers);
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_time_layer));
 
@@ -190,8 +195,8 @@ static void window_load(Window* win) {
 	text_layer_set_text_color(text_lower_date_layer, GColorWhite);
 	text_layer_set_text_alignment(text_lower_date_layer, GTextAlignmentCenter);
 	text_layer_set_background_color(text_lower_date_layer, GColorClear);
-	text_layer_set_font(text_lower_date_layer,
-			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
+//	text_layer_set_font(text_lower_date_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
+	text_layer_set_font(text_lower_date_layer, font_21);
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_lower_date_layer));
 
@@ -201,8 +206,8 @@ static void window_load(Window* win) {
 	text_layer_set_text_color(text_lower_time_layer, GColorWhite);
 	text_layer_set_text_alignment(text_lower_time_layer, GTextAlignmentCenter);
 	text_layer_set_background_color(text_lower_time_layer, GColorClear);
-	text_layer_set_font(text_lower_time_layer,
-			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
+//	text_layer_set_font(text_lower_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+	text_layer_set_font(text_lower_time_layer, font_21);
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_lower_time_layer));
 
@@ -212,8 +217,7 @@ static void window_load(Window* win) {
 	text_layer_set_text_color(text_battery_layer, GColorWhite);
 	text_layer_set_text_alignment(text_battery_layer, GTextAlignmentLeft);
 	text_layer_set_background_color(text_battery_layer, GColorClear);
-	text_layer_set_font(text_battery_layer,
-			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
+	text_layer_set_font(text_battery_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_battery_layer));
 }
@@ -260,6 +264,12 @@ void handle_battery_update(BatteryChargeState charge_state) {
 
 void do_init() {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+
+	// Load the fonts before anything in the window functions
+	// tries to use them.
+	font_21 = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21));
+	font_49_numbers = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_B_SUBSET_49));
+
 	window = window_create();
 	// XXX This seems to be more for apps that load and unload windows a lot,
 	// not really for watchfaces, so consider changing this to just do the
@@ -284,6 +294,9 @@ void do_deinit(void) {
 	// XXX TODO Release other layers?
 	//window_unload(window) should have been called to destroy layers?
 	window_destroy(window);
+
+	fonts_unload_custom_font(font_49_numbers);
+	fonts_unload_custom_font(font_21);
 }
 
 int main(void) {
