@@ -7,14 +7,13 @@ General layout is below (not to scale).
 | 2013-10-06 |
 |            |
 |   09:23    | <<< big font
-|     59     | <<< TODO: not yet added
 |     AM     | <<< only in 12-hour mode
+| w:--  p:-- | <<< battery indicator for watch and phone (? can do phone w/out phone app?)
 +------------+
 
 Vibrate on the hour, when enabled.  (Enabled by default.)
 
 Used "Simplicity" watchface as a guide, but I want the day of the week.
-Also, I eventually want to add number of meetings or timezone info.
 
 */
 
@@ -57,9 +56,23 @@ Also, I eventually want to add number of meetings or timezone info.
 #define LOWER_TIME_WIDTH  SCREEN_TIME_WIDTH
 #define LOWER_TIME_HEIGHT 31 // SMALL_FONT_HEIGHT
 
+#define BATTERY_X DRAW_INSET
+#define BATTERY_Y 145 // LOWER_TIME_Y + LOWER_TIME_HEIGHT + FONT_PAD_Y
+#define BATTERY_WIDTH  DRAW_WIDTH
+#define BATTERY_HEIGHT 31 // SMALL_FONT_HEIGHT (can get away with less b/c no descending characters)
+
 #define VIBRATE_HOURLY 1 // Change to 0 to disable
 
 #define ALL_TIME_CHANGED (SECOND_UNIT | MINUTE_UNIT | HOUR_UNIT | DAY_UNIT | MONTH_UNIT | YEAR_UNIT)
+
+typedef enum {
+	CHARGE_PERCENT_FIELD = 0x1,
+	IS_CHARGING_FIELD    = 0x2,
+	IS_PLUGGED_FIELD     = 0x4,
+} BatteryFields;
+
+#define ALL_BATTERY_CHANGED (CHARGE_PERCENT_FIELD | IS_CHARGING_FIELD | IS_PLUGGED_FIELD)
+
 
 Window* window;
 
@@ -67,13 +80,15 @@ TextLayer* text_date_layer;
 TextLayer* text_time_layer;
 TextLayer* text_lower_date_layer;
 TextLayer* text_lower_time_layer;
+TextLayer* text_battery_layer;
 
 const VibePattern HOUR_VIBE_PATTERN = {
   .durations = (uint32_t []) {50, 200, 50, 200, 50, 200},
   .num_segments = 6
 };
 
-void draw_screen(struct tm* ptime, TimeUnits units_changed) {
+void draw_screen(struct tm* ptime, TimeUnits units_changed,
+		 BatteryChargeState charge_state, BatteryFields battery_changed) {
 	// Buffers we can format text into.
 	// Need to be static because they're used by the text layers
 	// even after this function completes.
@@ -81,6 +96,7 @@ void draw_screen(struct tm* ptime, TimeUnits units_changed) {
 	static char date_text[]  = "Xxxxxxxxxx"; // Wednesday
 	static char lower_date[] = "0000-00-00"; // 2013-10-02
 	static char lower_time[] = "XX"; // AM
+	static char battery_text[] = "w: 000%"; // 0% - 100%
 
 	char *time_format;
 
@@ -128,9 +144,21 @@ void draw_screen(struct tm* ptime, TimeUnits units_changed) {
 		strftime(lower_time, sizeof(lower_time), "%p", ptime);
 		text_layer_set_text(text_lower_time_layer, lower_time);
 	}
+
+	// Update the battery text, if it changed.
+	// XXX Change from text to a drawing!
+	//APP_LOG(APP_LOG_LEVEL_DEBUG, "battery_changed=%x percent=%d %s\n", battery_changed, charge_state.charge_percent, battery_text);
+	if (battery_changed & CHARGE_PERCENT_FIELD) {
+		snprintf(battery_text, sizeof(battery_text), "w: %3d%%", charge_state.charge_percent);
+	}
+	// XXX If drawing the other fields (charging/plugged), test and draw those.
+	if (battery_changed) {
+		text_layer_set_text(text_battery_layer, battery_text);
+	}
 }
 
 static void window_load(Window* win) {
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 	// XXX TODO Base width/height on actual frame bounds.
 	// Eg bounds.size.w for width of frame
 
@@ -177,18 +205,31 @@ static void window_load(Window* win) {
 			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_lower_time_layer));
+
+	// Battery layer
+	text_battery_layer = text_layer_create((GRect) { .origin = { BATTERY_X, BATTERY_Y },
+				.size = { BATTERY_WIDTH, BATTERY_HEIGHT } });
+	text_layer_set_text_color(text_battery_layer, GColorWhite);
+	text_layer_set_text_alignment(text_battery_layer, GTextAlignmentLeft);
+	text_layer_set_background_color(text_battery_layer, GColorClear);
+	text_layer_set_font(text_battery_layer,
+			    fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_UBUNTU_21)));
+	layer_add_child(window_get_root_layer(win),
+			text_layer_get_layer(text_battery_layer));
 }
 
 static void window_appear(Window* win) {
 	// Update here to avoid blank display on launch
 	// and to update when the window is redrawn.
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 	time_t now = time(NULL);
-	struct tm* curr_time = localtime(&now);
-	draw_screen(curr_time, ALL_TIME_CHANGED);
-	free(curr_time);
+	draw_screen(localtime(&now), ALL_TIME_CHANGED,
+		    battery_state_service_peek(), ALL_BATTERY_CHANGED);
 }
 
 static void window_unload(Window *win) {
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+	text_layer_destroy(text_battery_layer);
 	text_layer_destroy(text_lower_time_layer);
 	text_layer_destroy(text_lower_date_layer);
 	text_layer_destroy(text_time_layer);
@@ -196,11 +237,33 @@ static void window_unload(Window *win) {
 }
 
 void handle_minute_tick(struct tm* tick_time, TimeUnits units_changed) {
-	draw_screen(tick_time, units_changed);
+	// Assume the battery didn't change.  If it did, the battery update
+	// function will redraw the screen.
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+	draw_screen(tick_time, units_changed,
+		    battery_state_service_peek(), 0);
 }
 
-void handle_init() {
+void handle_battery_update(BatteryChargeState charge_state) {
+	// Get the current time so we have something to pass,
+	// then say that nothing changed: let the tick handler
+	// draw with any updates.
+	// Ugh, can't take address of the temporary returned by time(NULL)
+	// to pass to localtime. :P
+	// XXX Could be smarter and save the battery state and compare, only
+	// setting the field flags as they change.  When I actually use the other
+	// fields, do that.
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+	time_t now = time(NULL);
+	draw_screen(localtime(&now), (TimeUnits) 0, charge_state, ALL_BATTERY_CHANGED);
+}
+
+void do_init() {
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 	window = window_create();
+	// XXX This seems to be more for apps that load and unload windows a lot,
+	// not really for watchfaces, so consider changing this to just do the
+	// text layer creation here.
 	window_set_window_handlers(window, (WindowHandlers) {
 				.load = window_load,
 				.appear = window_appear,
@@ -210,10 +273,13 @@ void handle_init() {
 	window_set_background_color(window, GColorBlack);
 
 	tick_timer_service_subscribe(MINUTE_UNIT, &handle_minute_tick);
+	battery_state_service_subscribe(&handle_battery_update);
 }
 
-void handle_deinit(void) {
+void do_deinit(void) {
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 	tick_timer_service_unsubscribe();
+	battery_state_service_unsubscribe();
 
 	// XXX TODO Release other layers?
 	//window_unload(window) should have been called to destroy layers?
@@ -221,11 +287,9 @@ void handle_deinit(void) {
 }
 
 int main(void) {
-	handle_init();
-
+	do_init();
 	app_event_loop();
-
-	handle_deinit();
+	do_deinit();
 
 	return 0;
 }
