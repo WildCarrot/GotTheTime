@@ -56,15 +56,20 @@ Used "Simplicity" watchface as a guide, but I want the day of the week.
 #define LOWER_TIME_WIDTH  SCREEN_TIME_WIDTH
 #define LOWER_TIME_HEIGHT 31 // SMALL_FONT_HEIGHT
 
-#define BATTERY_X DRAW_INSET
-#define BATTERY_Y 145 // LOWER_TIME_Y + LOWER_TIME_HEIGHT + FONT_PAD_Y
-#define BATTERY_WIDTH 68 // DRAW_WIDTH / 2
-#define BATTERY_HEIGHT 31 // SMALL_FONT_HEIGHT (can get away with less b/c no descending characters)
+#define WATCH_BATTERY_X DRAW_INSET
+#define WATCH_BATTERY_Y 145 // LOWER_TIME_Y + LOWER_TIME_HEIGHT + FONT_PAD_Y
+#define WATCH_BATTERY_WIDTH 48 // DRAW_WIDTH / 3
+#define WATCH_BATTERY_HEIGHT 31 // SMALL_FONT_HEIGHT (can get away with less b/c no descending characters)
 
-#define TEMPERATURE_X BATTERY_WIDTH
-#define TEMPERATURE_Y BATTERY_Y
-#define TEMPERATURE_WIDTH BATTERY_WIDTH
-#define TEMPERATURE_HEIGHT BATTERY_HEIGHT
+#define PHONE_BATTERY_X WATCH_BATTERY_WIDTH
+#define PHONE_BATTERY_Y WATCH_BATTERY_Y
+#define PHONE_BATTERY_WIDTH WATCH_BATTERY_WIDTH
+#define PHONE_BATTERY_HEIGHT WATCH_BATTERY_HEIGHT
+
+#define TEMPERATURE_X 96 // WATCH_BATTERY_WIDTH + PHONE_BATTERY_WIDTH
+#define TEMPERATURE_Y PHONE_BATTERY_Y
+#define TEMPERATURE_WIDTH PHONE_BATTERY_WIDTH
+#define TEMPERATURE_HEIGHT PHONE_BATTERY_HEIGHT
 
 #define VIBRATE_HOURLY 1 // Change to 0 to disable
 
@@ -78,10 +83,6 @@ typedef enum {
 
 #define ALL_BATTERY_CHANGED (CHARGE_PERCENT_FIELD | IS_CHARGING_FIELD | IS_PLUGGED_FIELD)
 
-// Message values
-#define INBOUND_MESSAGE_SIZE 64
-#define OUTBOUND_MESSAGE_SIZE 16
-
 typedef struct {
 	uint8_t icon_index;
 	const char* temperature_str;
@@ -94,10 +95,22 @@ typedef enum {
 
 #define ALL_WEATHER_CHANGED (WEATHER_ICON_FIELD | WEATHER_TEMPERATURE_FIELD)
 
+// App Message values
+
 typedef enum {
-	WEATHER_MESSAGE_ICON = 0x0, // TUPLE_UINT
-	WEATHER_MESSAGE_TEMPERATURE = 0x1, // TUPLE_CSTRING
-} WeatherMessageIndex;
+	WEATHER_MESSAGE_ICON = 0, // TUPLE_UINT
+	WEATHER_MESSAGE_TEMPERATURE = 1, // TUPLE_CSTRING
+	PHONE_BATTERY_PERCENT = 2, // TUPLE_UINT
+	PHONE_BATTERY_CHARGING = 3, // TUPLE_UINT
+	PHONE_BATTERY_PLUGGED = 4, // TUPLE_UINT
+} GTTMessageIndex; // GotTheTime App Message indexes
+
+#define INBOUND_MESSAGE_SIZE 64
+#define OUTBOUND_MESSAGE_SIZE 16
+
+// For getting information from the companion app on the phone.
+AppSync sync;
+uint8_t sync_buffer[64];
 
 
 Window* window;
@@ -106,12 +119,9 @@ TextLayer* text_date_layer;
 TextLayer* text_time_layer;
 TextLayer* text_lower_date_layer;
 TextLayer* text_lower_time_layer;
-TextLayer* text_battery_layer;
+TextLayer* text_watch_battery_layer;
+TextLayer* text_phone_battery_layer;
 TextLayer* text_temperature_layer;
-
-// For getting information from the companion app on the phone.
-AppSync sync;
-uint8_t sync_buffer[32];
 
 GFont font_21;
 GFont font_49_numbers;
@@ -122,7 +132,8 @@ const VibePattern HOUR_VIBE_PATTERN = {
 };
 
 void draw_screen(struct tm* ptime, TimeUnits units_changed,
-		 BatteryChargeState charge_state, BatteryFields battery_changed,
+		 BatteryChargeState watch_battery, BatteryFields watch_battery_changed,
+		 BatteryChargeState phone_battery, BatteryFields phone_battery_changed,
 		 Weather weather, WeatherFields weather_changed) {
 	// Buffers we can format text into.
 	// Need to be static because they're used by the text layers
@@ -131,7 +142,8 @@ void draw_screen(struct tm* ptime, TimeUnits units_changed,
 	static char date_text[]  = "Xxxxxxxxxx"; // Wednesday
 	static char lower_date[] = "0000-00-00"; // 2013-10-02
 	static char lower_time[] = "XX"; // AM
-	static char battery_text[] = "000% c"; // 0% - 100% c for "charging"
+	static char watch_battery_text[] = "w000% c"; // 0% - 100% c for "charging"
+	static char phone_battery_text[] = "p000% c"; // 0% - 100% c for "charging"
 	static char temperature_text[] = "0000pC"; // temperature
 
 	char *time_format;
@@ -183,15 +195,31 @@ void draw_screen(struct tm* ptime, TimeUnits units_changed,
 
 	// Update the battery text, if it changed.
 	// XXX Change from text to a drawing!
-	//APP_LOG(APP_LOG_LEVEL_DEBUG, "battery_changed=%x percent=%d %s charging?=%d\n", battery_changed, charge_state.charge_percent, battery_text, charge_state.is_charging);
-	if ((battery_changed & CHARGE_PERCENT_FIELD) ||
-	    (battery_changed & IS_CHARGING_FIELD)) {
-		snprintf(battery_text, sizeof(battery_text), "%3d%% %c", charge_state.charge_percent,
-			 ((battery_changed & IS_CHARGING_FIELD) && charge_state.is_charging)? 'c': ' ');
+	// Since this is using the same text layer, update for either one changing.
+	if ((watch_battery_changed & CHARGE_PERCENT_FIELD) ||
+	    (watch_battery_changed & IS_CHARGING_FIELD)) {
+		char watch_charging = ((watch_battery_changed & IS_CHARGING_FIELD) && watch_battery.is_charging)? 'c': ' ';
+		snprintf(watch_battery_text, sizeof(watch_battery_text), "%3d%%%c",
+			 watch_battery.charge_percent, watch_charging);
 	}
 	// XXX If drawing the other fields (charging/plugged), test and draw those.
-	if (battery_changed) {
-		text_layer_set_text(text_battery_layer, battery_text);
+	if (watch_battery_changed) {
+		text_layer_set_text(text_watch_battery_layer, watch_battery_text);
+	}
+
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "phone_battery: %d %d %d  changed: %x",
+		phone_battery.charge_percent,
+		phone_battery.is_charging,
+		phone_battery.is_plugged, phone_battery_changed);
+	if ((phone_battery_changed & CHARGE_PERCENT_FIELD) ||
+	    (phone_battery_changed & IS_CHARGING_FIELD)) {
+		char phone_charging = ((phone_battery_changed & IS_CHARGING_FIELD) && phone_battery.is_charging)? 'c': ' ';
+		snprintf(phone_battery_text, sizeof(phone_battery_text), "%3d%%%c",
+			 phone_battery.charge_percent, phone_charging);
+	}
+	// XXX If drawing the other fields (charging/plugged), test and draw those.
+	if (phone_battery_changed) {
+		text_layer_set_text(text_phone_battery_layer, phone_battery_text);
 	}
 
 	// Update the temperature text, if it changed.
@@ -232,6 +260,11 @@ static void sync_error_callback(DictionaryResult dict_err, AppMessageResult app_
 static void sync_tuple_changed_callback(const uint32_t key, const Tuple* new_values, const Tuple* old_values, void* context) {
 	Weather w;
 	WeatherFields wfields = 0;
+	BatteryChargeState b;
+	BatteryFields bfields = 0;
+
+	memset(&w, 0, sizeof(w));
+	memset(&b, 0, sizeof(b));
 
 	switch (key) {
 	case WEATHER_MESSAGE_ICON:
@@ -256,11 +289,43 @@ static void sync_tuple_changed_callback(const uint32_t key, const Tuple* new_val
 			APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature changed: ");
 		}
 		break;
+
+// XXX When we get values from the App, we'll get them one at a time in the
+// sync_tuple_changed_callback.  We need/want all the battery info at the same
+// time to correctly draw the phone's battery state.
+// Rather than solve that now, I'm going to ignore the charging/plugged info.
+// Another way would be to save the old value and only update the fields that have
+// new info.  Icky.
+
+	case PHONE_BATTERY_PERCENT:
+		if (new_values && new_values->value) {
+			b.charge_percent = new_values->value->uint8;
+			bfields |= CHARGE_PERCENT_FIELD;
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "Battery percent: %d", b.charge_percent);
+		}
+		break;
+	case PHONE_BATTERY_CHARGING:
+		/* if (new_values && new_values->value) { */
+		/* 	b.is_charging = new_values->value->uint8; */
+		/* 	bfields |= IS_CHARGING_FIELD; */
+		/* 	APP_LOG(APP_LOG_LEVEL_DEBUG, "Battery charging: %d", b.is_charging); */
+		/* } */
+		break;
+	case PHONE_BATTERY_PLUGGED:
+		/* if (new_values && new_values->value) { */
+		/* 	b.is_plugged = new_values->value->uint8; */
+		/* 	bfields |= IS_PLUGGED_FIELD; */
+		/* 	APP_LOG(APP_LOG_LEVEL_DEBUG, "Battery plugged: %d", b.is_plugged); */
+		/* } */
+		break;
 	};
 
 	time_t now = time(NULL);
 
-	draw_screen(localtime(&now), 0, battery_state_service_peek(), 0, w, wfields);
+	draw_screen(localtime(&now), 0,
+		    battery_state_service_peek(), 0,
+		    b, bfields,
+		    w, wfields);
 }
 
 static void window_load(Window* win) {
@@ -312,15 +377,25 @@ static void window_load(Window* win) {
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_lower_time_layer));
 
-	// Battery layer
-	text_battery_layer = text_layer_create((GRect) { .origin = { BATTERY_X, BATTERY_Y },
-				.size = { BATTERY_WIDTH, BATTERY_HEIGHT } });
-	text_layer_set_text_color(text_battery_layer, GColorWhite);
-	text_layer_set_text_alignment(text_battery_layer, GTextAlignmentLeft);
-	text_layer_set_background_color(text_battery_layer, GColorClear);
-	text_layer_set_font(text_battery_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
+	// Watch Battery layer
+	text_watch_battery_layer = text_layer_create((GRect) { .origin = { WATCH_BATTERY_X, WATCH_BATTERY_Y },
+				.size = { WATCH_BATTERY_WIDTH, WATCH_BATTERY_HEIGHT } });
+	text_layer_set_text_color(text_watch_battery_layer, GColorWhite);
+	text_layer_set_text_alignment(text_watch_battery_layer, GTextAlignmentLeft);
+	text_layer_set_background_color(text_watch_battery_layer, GColorClear);
+	text_layer_set_font(text_watch_battery_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
 	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_battery_layer));
+			text_layer_get_layer(text_watch_battery_layer));
+
+	// Phone Battery layer
+	text_phone_battery_layer = text_layer_create((GRect) { .origin = { PHONE_BATTERY_X, PHONE_BATTERY_Y },
+				.size = { PHONE_BATTERY_WIDTH, PHONE_BATTERY_HEIGHT } });
+	text_layer_set_text_color(text_phone_battery_layer, GColorWhite);
+	text_layer_set_text_alignment(text_phone_battery_layer, GTextAlignmentCenter);
+	text_layer_set_background_color(text_phone_battery_layer, GColorClear);
+	text_layer_set_font(text_phone_battery_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
+	layer_add_child(window_get_root_layer(win),
+			text_layer_get_layer(text_phone_battery_layer));
 
 	// Temperature layer
 	text_temperature_layer = text_layer_create((GRect) { .origin = { TEMPERATURE_X, TEMPERATURE_Y },
@@ -329,18 +404,8 @@ static void window_load(Window* win) {
 	text_layer_set_text_alignment(text_temperature_layer, GTextAlignmentRight);
 	text_layer_set_background_color(text_temperature_layer, GColorClear);
 	text_layer_set_font(text_temperature_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-
-	Tuplet initial_temperature_values[] = {
-		TupletInteger(WEATHER_MESSAGE_ICON, (uint8_t) 1),
-		TupletCString(WEATHER_MESSAGE_TEMPERATURE, "0000\u00B0C"),
-	};
-	app_sync_init(&sync, sync_buffer, sizeof(sync_buffer),
-		      initial_temperature_values, ARRAY_LENGTH(initial_temperature_values),
-		      sync_tuple_changed_callback, sync_error_callback, NULL);
-
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_temperature_layer));
-
 }
 
 static void window_appear(Window* win) {
@@ -349,8 +414,14 @@ static void window_appear(Window* win) {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 	time_t now = time(NULL);
 	Weather w;
+	BatteryChargeState b;
+
+	memset(&w, 0, sizeof(w));
+	memset(&b, 0, sizeof(b));
+
 	draw_screen(localtime(&now), ALL_TIME_CHANGED,
 		    battery_state_service_peek(), ALL_BATTERY_CHANGED,
+		    b, ALL_BATTERY_CHANGED,
 		    w, 0);
 }
 
@@ -360,7 +431,8 @@ static void window_unload(Window *win) {
 	app_sync_deinit(&sync);
 
 	text_layer_destroy(text_temperature_layer);
-	text_layer_destroy(text_battery_layer);
+	text_layer_destroy(text_phone_battery_layer);
+	text_layer_destroy(text_watch_battery_layer);
 	text_layer_destroy(text_lower_time_layer);
 	text_layer_destroy(text_lower_date_layer);
 	text_layer_destroy(text_time_layer);
@@ -372,8 +444,10 @@ void handle_minute_tick(struct tm* tick_time, TimeUnits units_changed) {
 	// function will redraw the screen.
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 	Weather w;
+	BatteryChargeState b;
 	draw_screen(tick_time, units_changed,
 		    battery_state_service_peek(), 0,
+		    b, 0,
 		    w, 0);
 }
 
@@ -389,7 +463,11 @@ void handle_battery_update(BatteryChargeState charge_state) {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 	time_t now = time(NULL);
 	Weather w;
-	draw_screen(localtime(&now), (TimeUnits) 0, charge_state, ALL_BATTERY_CHANGED, w, 0);
+	BatteryChargeState b;
+	draw_screen(localtime(&now), (TimeUnits) 0,
+		    charge_state, ALL_BATTERY_CHANGED,
+		    b, 0,
+		    w, 0);
 }
 
 void do_init() {
@@ -415,11 +493,23 @@ void do_init() {
 	tick_timer_service_subscribe(MINUTE_UNIT, &handle_minute_tick);
 	battery_state_service_subscribe(&handle_battery_update);
 
+	Tuplet initial_message_values[] = {
+		TupletInteger(WEATHER_MESSAGE_ICON, (uint8_t) 1),
+		TupletCString(WEATHER_MESSAGE_TEMPERATURE, "0000\u00B0C"),
+		TupletInteger(PHONE_BATTERY_PERCENT, (uint8_t) 0),
+		TupletInteger(PHONE_BATTERY_CHARGING, (uint8_t) 0),
+		TupletInteger(PHONE_BATTERY_PLUGGED, (uint8_t) 0),
+	};
+	app_sync_init(&sync, sync_buffer, sizeof(sync_buffer),
+		      initial_message_values, ARRAY_LENGTH(initial_message_values),
+		      sync_tuple_changed_callback, sync_error_callback, NULL);
+
 	app_message_open(INBOUND_MESSAGE_SIZE, OUTBOUND_MESSAGE_SIZE);
 }
 
 void do_deinit(void) {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+
 	tick_timer_service_unsubscribe();
 	battery_state_service_unsubscribe();
 
