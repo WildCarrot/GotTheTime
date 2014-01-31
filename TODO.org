@@ -12,6 +12,11 @@ Anytime
    - State "DONE"       from "TODO"       [2014-01-07 Tue 11:06]
    :END:
 ** TODO Graphic for battery, rather than text
-* TODO Add indicator (reverse video?) when not connected to phone via bluetooth
+* DONE Add indicator (reverse video?) when not connected to phone via bluetooth
+  CLOSED: [2014-01-31 Fri 18:55]
+  :LOGBOOK:
+  - State "DONE"       from "INPROGRESS" [2014-01-31 Fri 18:55]
+  :END:
+  Adding an icon instead and vibe when lose contact.
 * TODO Add number of meetings or timezone
 

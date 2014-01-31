@@ -27,7 +27,12 @@
         "type": "font",
         "name": "FONT_UBUNTU_B_SUBSET_49",
         "file": "fonts/Ubuntu-B.ttf"
-      }
+      },
+	{
+	    "type": "png",
+	    "name": "IMAGE_NO_BLUETOOTH",
+	    "file": "images/NoBluetooth32x32.png"
+	}
     ]
   }
 }

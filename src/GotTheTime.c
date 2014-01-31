@@ -51,10 +51,15 @@ Used "Simplicity" watchface as a guide, but I want the day of the week.
 #define LOWER_DATE_WIDTH  SCREEN_DATE_WIDTH
 #define LOWER_DATE_HEIGHT 31 // SMALL_FONT_HEIGHT + FONT_PAD_Y
 
-#define LOWER_TIME_X DRAW_INSET
+#define LOWER_TIME_X 32 // DRAW_INSET + 32
 #define LOWER_TIME_Y 112 // SCREEN_TIME_Y + SCREEN_TIME_HEIGHT + FONT_PAD_Y
-#define LOWER_TIME_WIDTH  SCREEN_TIME_WIDTH
+#define LOWER_TIME_WIDTH  121 // SCREEN_TIME_WIDTH - 15 (for inset)
 #define LOWER_TIME_HEIGHT 31 // SMALL_FONT_HEIGHT
+
+#define BLUETOOTH_WARN_X DRAW_INSET
+#define BLUETOOTH_WARN_Y 114 // LOWER_TIME_Y + FONT_PAD_Y
+#define BLUETOOTH_WARN_WIDTH  32
+#define BLUETOOTH_WARN_HEIGHT 32
 
 #define WATCH_BATTERY_X DRAW_INSET
 #define WATCH_BATTERY_Y 145 // LOWER_TIME_Y + LOWER_TIME_HEIGHT + FONT_PAD_Y
@@ -123,12 +128,22 @@ TextLayer* text_watch_battery_layer;
 TextLayer* text_phone_battery_layer;
 TextLayer* text_temperature_layer;
 
+BitmapLayer* bitmap_bluetooth_layer;
+GBitmap* bitmap_bluetooth_warn;
+
 GFont font_21;
 GFont font_49_numbers;
 
+// dit-dit-dit-dit = "H" in morse code. :)
 const VibePattern HOUR_VIBE_PATTERN = {
-  .durations = (uint32_t []) {50, 200, 50, 200, 50, 200},
-  .num_segments = 6
+  .durations = (uint32_t []) {50, 200, 50, 200, 50, 200, 50, 200},
+  .num_segments = 8
+};
+
+// dah-dit-dit-dit = "B" in morse code. :)
+const VibePattern BLUETOOTH_WARN_VIBE_PATTERN = {
+	.durations = (uint32_t []) {200, 200, 50, 200, 50, 200, 50, 200},
+	.num_segments = 8
 };
 
 void draw_screen(struct tm* ptime, TimeUnits units_changed,
@@ -406,6 +421,15 @@ static void window_load(Window* win) {
 	text_layer_set_font(text_temperature_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_temperature_layer));
+
+	// No bluetooth layer
+	bitmap_bluetooth_warn = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_NO_BLUETOOTH);
+	bitmap_bluetooth_layer = bitmap_layer_create((GRect) { .origin = { BLUETOOTH_WARN_X, BLUETOOTH_WARN_Y },
+				.size = { BLUETOOTH_WARN_WIDTH, BLUETOOTH_WARN_HEIGHT } });
+	bitmap_layer_set_bitmap(bitmap_bluetooth_layer, bitmap_bluetooth_warn);
+	bitmap_layer_set_alignment(bitmap_bluetooth_layer, GAlignCenter);
+	layer_add_child(window_get_root_layer(win),
+			bitmap_layer_get_layer(bitmap_bluetooth_layer));
 }
 
 static void window_appear(Window* win) {
@@ -423,12 +447,19 @@ static void window_appear(Window* win) {
 		    battery_state_service_peek(), ALL_BATTERY_CHANGED,
 		    b, ALL_BATTERY_CHANGED,
 		    w, 0);
+
+	// If bluetooth is connected (the normal state of things),
+	// don't show the layer yet.
+	layer_set_hidden((Layer*) bitmap_bluetooth_layer, bluetooth_connection_service_peek());
 }
 
 static void window_unload(Window *win) {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 
 	app_sync_deinit(&sync);
+
+	gbitmap_destroy(bitmap_bluetooth_warn);
+	bitmap_layer_destroy(bitmap_bluetooth_layer);
 
 	text_layer_destroy(text_temperature_layer);
 	text_layer_destroy(text_phone_battery_layer);
@@ -470,6 +501,17 @@ void handle_battery_update(BatteryChargeState charge_state) {
 		    w, 0);
 }
 
+void handle_bluetooth_update(bool connected)
+{
+	// If connected, clear the area (or, hide the layer).
+	// If disconnected, show the graphic/layer.
+	layer_set_hidden((Layer*) bitmap_bluetooth_layer, connected);
+
+	if (!connected) {
+		vibes_enqueue_custom_pattern(BLUETOOTH_WARN_VIBE_PATTERN);
+	}
+}
+
 void do_init() {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 
@@ -492,6 +534,7 @@ void do_init() {
 
 	tick_timer_service_subscribe(MINUTE_UNIT, &handle_minute_tick);
 	battery_state_service_subscribe(&handle_battery_update);
+	bluetooth_connection_service_subscribe(&handle_bluetooth_update);
 
 	Tuplet initial_message_values[] = {
 		TupletInteger(WEATHER_MESSAGE_ICON, (uint8_t) 1),
@@ -512,6 +555,7 @@ void do_deinit(void) {
 
 	tick_timer_service_unsubscribe();
 	battery_state_service_unsubscribe();
+	bluetooth_connection_service_unsubscribe();
 
 	// XXX TODO Release other layers?
 	//window_unload(window) should have been called to destroy layers?
