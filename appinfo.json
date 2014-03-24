@@ -8,7 +8,14 @@
   "watchapp": {
     "watchface": true
   },
-  "appKeys": {},
+  "capabilities": [ "location", "configurable", "battery" ],
+  "appKeys": {
+      "WEATHER_MESSAGE_ICON": 0,
+      "WEATHER_MESSAGE_TEMPERATURE": 1,
+      "PHONE_BATTERY_PERCENT": 2,
+      "PHONE_BATTERY_CHARGINE": 3,
+      "PHONE_BATTERY_PLUGGED": 4
+  },
   "resources": {
     "media": [
       {

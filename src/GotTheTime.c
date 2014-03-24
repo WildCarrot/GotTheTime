@@ -8,7 +8,7 @@ General layout is below (not to scale).
 |            |
 |   09:23    | <<< big font
 |     AM     | <<< only in 12-hour mode
-| w:--  p:-- | <<< battery indicator for watch and phone (? can do phone w/out phone app?)
+| w:--  p:-- | <<< battery indicator for watch and phone, temperature (from phone app)
 +------------+
 
 Vibrate on the hour, when enabled.  (Enabled by default.)
@@ -111,7 +111,7 @@ typedef enum {
 } GTTMessageIndex; // GotTheTime App Message indexes
 
 #define INBOUND_MESSAGE_SIZE 64
-#define OUTBOUND_MESSAGE_SIZE 16
+#define OUTBOUND_MESSAGE_SIZE 64
 
 // For getting information from the companion app on the phone.
 AppSync sync;
@@ -272,6 +272,28 @@ static void sync_error_callback(DictionaryResult dict_err, AppMessageResult app_
 	};
 }
 
+static void send_message(void) {
+	// Empty message to send, just to trigger the JS/phone to do something.
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+	Tuplet value = TupletInteger(1, 1);
+
+	DictionaryIterator *iter;
+	AppMessageResult res = app_message_outbox_begin(&iter);
+	DictionaryResult dres = DICT_OK;
+	sync_error_callback(dres, res, NULL);
+
+	if (iter == NULL) {
+		APP_LOG(APP_LOG_LEVEL_DEBUG, "NO OUTBOX ITER!");
+		return;
+	}
+
+	dict_write_tuplet(iter, &value);
+	dict_write_end(iter);
+
+	app_message_outbox_send();
+}
+
+
 static void sync_tuple_changed_callback(const uint32_t key, const Tuple* new_values, const Tuple* old_values, void* context) {
 	Weather w;
 	WeatherFields wfields = 0;
@@ -301,7 +323,9 @@ static void sync_tuple_changed_callback(const uint32_t key, const Tuple* new_val
 		if (new_values && new_values->value) {
 			wfields |= WEATHER_TEMPERATURE_FIELD;
 			w.temperature_str = new_values->value->cstring;
-			APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature changed: ");
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature changed: %x %x %x",
+				w.temperature_str[0], w.temperature_str[1],
+				w.temperature_str[2]);
 		}
 		break;
 
@@ -451,6 +475,18 @@ static void window_appear(Window* win) {
 	// If bluetooth is connected (the normal state of things),
 	// don't show the layer yet.
 	layer_set_hidden((Layer*) bitmap_bluetooth_layer, bluetooth_connection_service_peek());
+
+	Tuplet initial_message_values[] = {
+		TupletInteger(WEATHER_MESSAGE_ICON, (uint8_t) 1),
+		TupletCString(WEATHER_MESSAGE_TEMPERATURE, "0000\u00B0C"),
+		TupletInteger(PHONE_BATTERY_PERCENT, (uint8_t) 0),
+		TupletInteger(PHONE_BATTERY_CHARGING, (uint8_t) 0),
+		TupletInteger(PHONE_BATTERY_PLUGGED, (uint8_t) 0),
+	};
+	app_sync_init(&sync, sync_buffer, sizeof(sync_buffer),
+		      initial_message_values, ARRAY_LENGTH(initial_message_values),
+		      sync_tuple_changed_callback, sync_error_callback, NULL);
+	send_message();
 }
 
 static void window_unload(Window *win) {
@@ -480,6 +516,14 @@ void handle_minute_tick(struct tm* tick_time, TimeUnits units_changed) {
 		    battery_state_service_peek(), 0,
 		    b, 0,
 		    w, 0);
+
+	// Update the weather frequently, but not every minute.
+	// The "or hour" is there to catch when we first load the watchface.
+	// On "appear", we may not have the message conduit setup yet.
+	if ((tick_time->tm_min % 15 == 0) || (units_changed & HOUR_UNIT)) {
+		APP_LOG(APP_LOG_LEVEL_DEBUG, ">>>> POKING APP TO GIVE ME WEATHER");
+		send_message();
+	}
 }
 
 void handle_battery_update(BatteryChargeState charge_state) {
@@ -536,18 +580,19 @@ void do_init() {
 	battery_state_service_subscribe(&handle_battery_update);
 	bluetooth_connection_service_subscribe(&handle_bluetooth_update);
 
-	Tuplet initial_message_values[] = {
-		TupletInteger(WEATHER_MESSAGE_ICON, (uint8_t) 1),
-		TupletCString(WEATHER_MESSAGE_TEMPERATURE, "0000\u00B0C"),
-		TupletInteger(PHONE_BATTERY_PERCENT, (uint8_t) 0),
-		TupletInteger(PHONE_BATTERY_CHARGING, (uint8_t) 0),
-		TupletInteger(PHONE_BATTERY_PLUGGED, (uint8_t) 0),
-	};
-	app_sync_init(&sync, sync_buffer, sizeof(sync_buffer),
-		      initial_message_values, ARRAY_LENGTH(initial_message_values),
-		      sync_tuple_changed_callback, sync_error_callback, NULL);
-
 	app_message_open(INBOUND_MESSAGE_SIZE, OUTBOUND_MESSAGE_SIZE);
+
+	/* Tuplet initial_message_values[] = { */
+	/* 	TupletInteger(WEATHER_MESSAGE_ICON, (uint8_t) 1), */
+	/* 	TupletCString(WEATHER_MESSAGE_TEMPERATURE, "0000\u00B0C"), */
+	/* 	TupletInteger(PHONE_BATTERY_PERCENT, (uint8_t) 0), */
+	/* 	TupletInteger(PHONE_BATTERY_CHARGING, (uint8_t) 0), */
+	/* 	TupletInteger(PHONE_BATTERY_PLUGGED, (uint8_t) 0), */
+	/* }; */
+	/* app_sync_init(&sync, sync_buffer, sizeof(sync_buffer), */
+	/* 	      initial_message_values, ARRAY_LENGTH(initial_message_values), */
+	/* 	      sync_tuple_changed_callback, sync_error_callback, NULL); */
+//	send_message();
 }
 
 void do_deinit(void) {

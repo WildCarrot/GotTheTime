@@ -1,11 +1,13 @@
 TODOs for my watch face
 
-Anytime
+* Anytime
+* TODO Add timer/graphic when haven't heard from phone in a while
+  So I can see if the weather is up to date or not (and phone battery)
 * TODO Add seconds display (small and to the right of AM/PM?)
 
 
 2.0 SDK
-* TODO Add pebble battery percent
+* INPROGRESS Add pebble battery percent
 ** DONE Smaller font
    CLOSED: [2014-01-07 Tue 11:06]
    :LOGBOOK:
@@ -19,4 +21,17 @@ Anytime
   :END:
   Adding an icon instead and vibe when lose contact.
 * TODO Add number of meetings or timezone
+* TODO Figure out why getting an APP_MSG_BUSY when first start the phone app
+  <2014-03-22 Sat>
+  Probably a race.  The error means there are pending messages (either inbound
+  or outbound) that need to be processed first.
+* TODO Send message to phone app to trigger weather/battery when watchface first loads
+* For the phone app
+* TODO Add controls for how often the watch should be updated
 
+* Found a JS way to get some basic info from the phone without a phone app
+  https://developer.getpebble.com/2/guides/javascript-guide.html
+  Demos in PebbleSDK-2.0.2/PebbleSDK-2.x/Examples/pebblekit-js/weather
+  and js-configure-demo
+  Doesn't seem possible yet to get the phone's battery, even though there's a
+  javascript way to do it.
