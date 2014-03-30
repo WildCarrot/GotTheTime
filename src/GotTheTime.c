@@ -85,8 +85,6 @@ Used "Simplicity" watchface as a guide, but I want the day of the week.
 // After losing bluetooth, the wait before the vibe/display is sent.
 // This should stop it from alerting on very short drops in bluetooth.
 #define BLUETOOTH_TIMEOUT_MS 5000
-AppTimer* bluetooth_timer = NULL;
-bool bluetooth_connected;
 
 // dit-dit-dit-dit = "H" in morse code. :)
 const VibePattern HOUR_VIBE_PATTERN = {
@@ -197,6 +195,16 @@ void draw_time(struct tm* ptime) {
 	if (!clock_is_24h_style()) {
 		strftime(ampm, sizeof(ampm), "%p", ptime);
 		text_layer_set_text(text_time_ampm_layer, ampm);
+	}
+}
+
+void draw_bluetooth_warning(bool connected) {
+	// If connected, clear the area (or, hide the layer).
+	// If disconnected, show the graphic/layer.
+	layer_set_hidden((Layer*) bitmap_bluetooth_layer, connected);
+
+	if (!connected) {
+		vibes_enqueue_custom_pattern(BLUETOOTH_WARN_VIBE_PATTERN);
 	}
 }
 
@@ -363,45 +371,24 @@ void handle_battery_update(BatteryChargeState charge_state) {
 	draw_battery_watch(charge_state);
 }
 
-void bluetooth_timer_callback(void* data) {
-	bool connected = *((bool*) data);
-	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s %s", __FUNCTION__, (connected? "true": "false"));
-
-	// If connected, clear the area (or, hide the layer).
-	// If disconnected, show the graphic/layer.
-	layer_set_hidden((Layer*) bitmap_bluetooth_layer, connected);
-
-	if (!connected) {
-		vibes_enqueue_custom_pattern(BLUETOOTH_WARN_VIBE_PATTERN);
-	}
+void bluetooth_timer_callback(void* ignored) {
+	draw_bluetooth_warning(bluetooth_connection_service_peek());
 }
 
 void handle_bluetooth_update(bool connected)
 {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s %s", __FUNCTION__, (connected? "true": "false"));
-	bluetooth_connected = connected;
 
 	if (connected) {
-		// If we had a timer in-flight, just expire it now
-		// and let it hide the warning.
-		if (bluetooth_timer) {
-			app_timer_reschedule(bluetooth_timer, 0);
-		}
+		draw_bluetooth_warning(bluetooth_connection_service_peek());
 	}
 	else {
 		// Don't show/buzz right away, wait for a few seconds.
-		if (bluetooth_timer) {
-			// If there was already a disconnect timer in-flight,
-			// just push the time out since we must have
-			// disconnected twice while the timer was outstanding.
-			app_timer_reschedule(bluetooth_timer,
-					     BLUETOOTH_TIMEOUT_MS);
-		}
-		else {
-			bluetooth_timer = app_timer_register(BLUETOOTH_TIMEOUT_MS,
-							     bluetooth_timer_callback,
-							     &bluetooth_connected);
-		}
+		// I'm not being smart here and cancelling any in-flight
+		// timers in the case we're flapping the connect/disconnect.
+		app_timer_register(BLUETOOTH_TIMEOUT_MS,
+				   bluetooth_timer_callback,
+				   NULL);
 	}
 }
 
