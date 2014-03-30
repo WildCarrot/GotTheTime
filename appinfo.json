@@ -37,8 +37,28 @@
       },
 	{
 	    "type": "png",
-	    "name": "IMAGE_NO_BLUETOOTH",
-	    "file": "images/NoBluetooth32x32.png"
+	    "name": "IMAGE_WEATHER_NONE",
+	    "file": "images/WeatherUnknown.png"
+	},
+	{
+	    "type": "png",
+	    "name": "IMAGE_WEATHER_RAIN",
+	    "file": "images/WeatherRainy.png"
+	},
+	{
+	    "type": "png",
+	    "name": "IMAGE_WEATHER_SNOW",
+	    "file": "images/WeatherSnowy.png"
+	},
+	{
+	    "type": "png",
+	    "name": "IMAGE_WEATHER_SUN",
+	    "file": "images/WeatherSunny.png"
+	},
+	{
+	    "type": "png",
+	    "name": "IMAGE_WEATHER_CLOUD",
+	    "file": "images/WeatherCloudy.png"
 	}
     ]
   }

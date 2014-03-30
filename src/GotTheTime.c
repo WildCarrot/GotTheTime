@@ -4,12 +4,13 @@ General layout is below (not to scale).
 Used "Simplicity" watchface as a guide, but I want the day of the week.
 
 +------------+
+|w%    B   p%| <<< status
 |   Sunday   |
-| 2013-10-06 |
+| 2013-10-06 | <<< date area
 |            |
-|   09:23    | <<< big font
-|     AM     | <<< only in 12-hour mode
-| w:--  p:-- | <<< battery indicator for watch and phone, temperature (from phone app)
+|    09:23   | <<< time in big font
+|            |
+| sun    10d | <<< weather
 +------------+
 
 - Vibrate on the hour, when enabled.  (Enabled by default.)
@@ -21,6 +22,8 @@ Used "Simplicity" watchface as a guide, but I want the day of the week.
 #include <time.h>
 
 // ---------- Screen Locations ------------------------------
+// These are all relative to the base window.
+// Individual layers are relative to their parent layer.
 
 /* Seems like these should be defined somewhere. */
 #define SCREEN_WIDTH  144
@@ -30,53 +33,36 @@ Used "Simplicity" watchface as a guide, but I want the day of the week.
 #define SCREEN_MIDDLE_Y 84 /* SCREEN_HEIGHT / 2 */
 
 #define DRAW_INSET 0
-#define DRAW_WIDTH 136 // SCREEN_WIDTH - DRAW_INSET
+#define DRAW_WIDTH 144 // SCREEN_WIDTH - DRAW_INSET
 
 #define SMALL_FONT_HEIGHT 21
 #define LARGE_FONT_HEIGHT 49
 #define FONT_PAD_Y 2
 
-// I think the drawing of text is smart enough to use the upper-left
-// corner of where you want to draw text and not the baseline.
-#define SCREEN_DATE_DOW_X DRAW_INSET
-#define SCREEN_DATE_DOW_Y 3
-#define SCREEN_DATE_DOW_WIDTH  DRAW_WIDTH
-#define SCREEN_DATE_DOW_HEIGHT 26 // SMALL_FONT_HEIGHT + FONT_PAD_Y + 4 to make room for descent of "y" in "Thursday"
 
-#define SCREEN_TIME_X DRAW_INSET
-#define SCREEN_TIME_Y 59 // SCREEN_MIDDLE_Y - LARGE_FONT_HEIGHT/2
-#define SCREEN_TIME_WIDTH  DRAW_WIDTH
-#define SCREEN_TIME_HEIGHT 51 // LARGE_FONT_HEIGHT + FONT_PAD_Y
+/* Status area */
+#define STATUS_X DRAW_INSET
+#define STATUS_Y DRAW_INSET
+#define STATUS_WIDTH  DRAW_WIDTH
+#define STATUS_HEIGHT 16 // Just some small graphics here
 
-#define SCREEN_DATE_X DRAW_INSET
-#define SCREEN_DATE_Y 28 // SCREEN_DATE_Y + SCREEN_DATE_HEIGHT
-#define SCREEN_DATE_WIDTH  SCREEN_DATE_DOW_WIDTH
-#define SCREEN_DATE_HEIGHT 31 // SMALL_FONT_HEIGHT + FONT_PAD_Y
+/* Date area */
+#define DATE_X DRAW_INSET
+#define DATE_Y 16 // STATUS_Y + STATUS_HEIGHT
+#define DATE_WIDTH  DRAW_WIDTH
+#define DATE_HEIGHT 50 // 2 * SMALL_FONT_HEIGHT + 2 * FONT_PAD_Y + 4 for the descent of "y"
 
-#define SCREEN_TIME_AMPM_X 32 // DRAW_INSET + 32
-#define SCREEN_TIME_AMPM_Y 112 // SCREEN_TIME_Y + SCREEN_TIME_HEIGHT + FONT_PAD_Y
-#define SCREEN_TIME_AMPM_WIDTH  121 // SCREEN_TIME_WIDTH - 15 (for inset)
-#define SCREEN_TIME_AMPM_HEIGHT 31 // SMALL_FONT_HEIGHT
+/* Time area */
+#define TIME_X DRAW_INSET
+#define TIME_Y 68 // DATE_Y + DATE_HEIGHT + FONT_PAD_Y
+#define TIME_WIDTH  DRAW_WIDTH
+#define TIME_HEIGHT 51 // LARGE_FONT_HEIGHT + FONT_PAD_Y
 
-#define BLUETOOTH_WARN_X DRAW_INSET
-#define BLUETOOTH_WARN_Y 114 // SCREEN_TIME_AMPM_Y + FONT_PAD_Y
-#define BLUETOOTH_WARN_WIDTH  32
-#define BLUETOOTH_WARN_HEIGHT 32
-
-#define WATCH_BATTERY_X DRAW_INSET
-#define WATCH_BATTERY_Y 145 // SCREEN_TIME_AMPM_Y + SCREEN_TIME_AMPM_HEIGHT + FONT_PAD_Y
-#define WATCH_BATTERY_WIDTH 48 // DRAW_WIDTH / 3
-#define WATCH_BATTERY_HEIGHT 31 // SMALL_FONT_HEIGHT (can get away with less b/c no descending characters)
-
-#define PHONE_BATTERY_X WATCH_BATTERY_WIDTH
-#define PHONE_BATTERY_Y WATCH_BATTERY_Y
-#define PHONE_BATTERY_WIDTH WATCH_BATTERY_WIDTH
-#define PHONE_BATTERY_HEIGHT WATCH_BATTERY_HEIGHT
-
-#define TEMPERATURE_X 96 // WATCH_BATTERY_WIDTH + PHONE_BATTERY_WIDTH
-#define TEMPERATURE_Y PHONE_BATTERY_Y
-#define TEMPERATURE_WIDTH PHONE_BATTERY_WIDTH
-#define TEMPERATURE_HEIGHT PHONE_BATTERY_HEIGHT
+/* Weather area */
+#define WEATHER_X DRAW_INSET
+#define WEATHER_Y 120 // TIME_Y + TIME_HEIGHT
+#define WEATHER_WIDTH  DRAW_WIDTH
+#define WEATHER_HEIGHT 48 // SCREEN_HEIGHT - DRAW_INSET - WEATHER_Y
 
 // ---------- Options and vibes ------------------------------
 
@@ -108,6 +94,24 @@ typedef enum {
 	WEATHER_MESSAGE_TEMPERATURE = 4, // TUPLE_UINT
 } GTTMessageIndex; // GotTheTime App Message indexes
 
+// Weather Icon codes are here:
+// http://bugs.openweathermap.org/projects/api/wiki/Weather_Condition_Codes
+typedef enum {
+        WEATHER_ICON_NONE = 0,
+	WEATHER_ICON_RAIN = 1,  // 200 - 500
+	WEATHER_ICON_SNOW = 2,  // 600
+	WEATHER_ICON_SUN = 3,   // 800, 801
+	WEATHER_ICON_CLOUD = 4, // 802-804
+} WeatherIconCode;
+
+static uint32_t WEATHER_ICONS[] = {
+        RESOURCE_ID_IMAGE_WEATHER_NONE,
+	RESOURCE_ID_IMAGE_WEATHER_RAIN,
+	RESOURCE_ID_IMAGE_WEATHER_SNOW,
+	RESOURCE_ID_IMAGE_WEATHER_SUN,
+	RESOURCE_ID_IMAGE_WEATHER_CLOUD,
+};
+
 #define INBOUND_MESSAGE_SIZE 64
 #define OUTBOUND_MESSAGE_SIZE 64
 
@@ -128,16 +132,22 @@ WeatherInfo weather_info;
 
 Window* window;
 
-TextLayer* text_date_dow_layer;
-TextLayer* text_date_layer;
-TextLayer* text_time_layer;
-TextLayer* text_time_ampm_layer;
-TextLayer* text_battery_watch_layer;
-TextLayer* text_battery_phone_layer;
-TextLayer* text_temperature_layer;
+Layer* status_layer;  // Battery and bluetooth status
+Layer* status_watch_battery_layer;
+Layer* status_phone_battery_layer;
+TextLayer* status_bluetooth_warn_layer;
 
-BitmapLayer* bitmap_bluetooth_layer;
-GBitmap* bitmap_bluetooth_warn;
+Layer* date_layer;    // Date and day of week
+TextLayer* date_dow_layer;
+TextLayer* date_text_layer;
+
+Layer* time_layer;    // Time
+TextLayer* time_text_layer;
+
+Layer* weather_layer; // Weather info
+BitmapLayer* weather_cond_layer;
+GBitmap* weather_cond_bitmap;
+TextLayer* weather_temp_layer;
 
 GFont font_21;
 GFont font_49_numbers;
@@ -149,7 +159,7 @@ void draw_dayofweek(struct tm* ptime) {
 
 	// Day of the week, full name
 	strftime(day_text, sizeof(day_text), "%A", ptime);
-	text_layer_set_text(text_date_dow_layer, day_text);
+	text_layer_set_text(date_dow_layer, day_text);
 }
 
 void draw_date(struct tm* ptime) {
@@ -157,15 +167,16 @@ void draw_date(struct tm* ptime) {
 
 	// Date
 	strftime(date_text, sizeof(date_text), "%Y-%m-%d", ptime);
-	text_layer_set_text(text_date_layer, date_text);
+	text_layer_set_text(date_text_layer, date_text);
 }
 
 void draw_time(struct tm* ptime) {
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+
 	// Although this makes it different from the other "per line"
 	// drawing functions, the time is all related, so update all
 	// the time lines in the same function.
 	static char time_text[]  = "00:00";
-	static char ampm[] = "XX"; // AM
 	char* time_format = NULL;
 
 	// Time, not including seconds
@@ -185,56 +196,73 @@ void draw_time(struct tm* ptime) {
 		memmove(time_text, &time_text[1], sizeof(time_text) - 1);
 	}
 
-	text_layer_set_text(text_time_layer, time_text);
+	text_layer_set_text(time_text_layer, time_text);
 
 	if (VIBRATE_HOURLY && (ptime->tm_min == 0)) {
 		vibes_enqueue_custom_pattern(HOUR_VIBE_PATTERN);
 	}
-
-	// Set the AM/PM, if needed.
-	if (!clock_is_24h_style()) {
-		strftime(ampm, sizeof(ampm), "%p", ptime);
-		text_layer_set_text(text_time_ampm_layer, ampm);
-	}
 }
 
 void draw_bluetooth_warning(bool connected) {
-	// If connected, clear the area (or, hide the layer).
-	// If disconnected, show the graphic/layer.
-	layer_set_hidden((Layer*) bitmap_bluetooth_layer, connected);
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+	static char blue_text[] = "B!";
+
+	snprintf(blue_text, sizeof(blue_text), "%s",
+		 (connected? "": "B!"));
+	text_layer_set_text(status_bluetooth_warn_layer, blue_text);
 
 	if (!connected) {
 		vibes_enqueue_custom_pattern(BLUETOOTH_WARN_VIBE_PATTERN);
 	}
 }
 
-void battery_text_common(BatteryChargeState batt, char* text, uint16_t text_len) {
-	char charging = (batt.is_charging)? 'c': ' ';
-	if (batt.is_plugged) {
-		charging = 'p';
-	}
-	snprintf(text, text_len, "%3d%%%c", batt.charge_percent, charging);
+void draw_battery_common(Layer* layer, GContext* ctx, BatteryChargeState batt) {
+	// Inset the battery a few pixels.
+	GRect batt_rect = layer_get_bounds(layer);
+	// XXX Trying to make this look good, but it's hard.
+	batt_rect.origin.x += 12;
+	batt_rect.origin.y += 2;
+	batt_rect.size.w -= 12;
+	batt_rect.size.h -= 2;
+
+	// Draw the outline
+	graphics_context_set_stroke_color(ctx, GColorWhite);
+	graphics_context_set_fill_color(ctx, GColorBlack);
+	graphics_draw_rect(ctx, batt_rect);
+
+	// Fill to a percent of the box
+	graphics_context_set_fill_color(ctx, GColorWhite);
+	float percent = batt.charge_percent / 100.0;
+	int fill_width = batt_rect.size.w * percent;
+	GRect fill_rect = batt_rect;
+	fill_rect.size.w = fill_width;
+
+	graphics_fill_rect(ctx, fill_rect, 0, GCornerNone);
 }
 
-void draw_battery_watch(BatteryChargeState batt) {
-	static char watch_battery_text[] = "000%c"; // 0% - 100% c for "charging"
-
-	battery_text_common(batt, watch_battery_text, sizeof(watch_battery_text));
-	text_layer_set_text(text_battery_watch_layer, watch_battery_text);
+void draw_battery_watch_callback(Layer* layer, GContext* ctx) {
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+	draw_battery_common(layer, ctx, battery_state_service_peek());
 }
 
-void draw_battery_phone(BatteryChargeState batt) {
-	static char phone_battery_text[] = "000%c"; // 0% - 100% c for "charging"
-
-	battery_text_common(batt, phone_battery_text, sizeof(phone_battery_text));
-	text_layer_set_text(text_battery_phone_layer, phone_battery_text);
+void draw_battery_phone_callback(Layer* layer, GContext* ctx) {
+	draw_battery_common(layer, ctx, phone_battery_state);
 }
 
 void draw_weather(WeatherInfo winfo) {
-	static char temperature_text[] = "000%C"; // temperature
+	static char temperature_text[] = "000 %C"; // temperature, 2 spaces for unicode degree sign
 
-	snprintf(temperature_text, sizeof(temperature_text), "%3d\u00B0", (int) winfo.temp);
-	text_layer_set_text(text_temperature_layer, temperature_text);
+	snprintf(temperature_text, sizeof(temperature_text), "%3d\u00B0C", (int) winfo.temp);
+	text_layer_set_text(weather_temp_layer, temperature_text);
+
+	// If we didn't get an icon, just leave it unchanged.
+	if (winfo.icon > 0) {
+		if (weather_cond_bitmap) {
+			gbitmap_destroy(weather_cond_bitmap);
+		}
+		weather_cond_bitmap = gbitmap_create_with_resource(WEATHER_ICONS[winfo.icon]);
+		bitmap_layer_set_bitmap(weather_cond_layer, weather_cond_bitmap);
+	}
 }
 
 
@@ -346,7 +374,7 @@ static void sync_tuple_changed_callback(const uint32_t key,
 	};
 
 	if (update_battery) {
-		draw_battery_phone(phone_battery_state);
+		layer_mark_dirty(status_phone_battery_layer);
 	}
 
 	if (update_weather) {
@@ -368,7 +396,7 @@ void handle_minute_tick(struct tm* tick_time, TimeUnits units_changed) {
 }
 
 void handle_battery_update(BatteryChargeState charge_state) {
-	draw_battery_watch(charge_state);
+	layer_mark_dirty(status_phone_battery_layer);
 }
 
 void bluetooth_timer_callback(void* ignored) {
@@ -393,92 +421,125 @@ void handle_bluetooth_update(bool connected)
 }
 
 
-// ---------- Window functions ------------------------------
+// ---------- Window and layer functions ------------------------------
 
 static void window_load(Window* win) {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
-	// XXX TODO Base width/height on actual frame bounds.
-	// Eg bounds.size.w for width of frame
 
-	// Day of week layer
-	text_date_dow_layer = text_layer_create((GRect) { .origin = { SCREEN_DATE_DOW_X, SCREEN_DATE_DOW_Y },
-				.size = { SCREEN_DATE_DOW_WIDTH, SCREEN_DATE_DOW_HEIGHT } });
-	text_layer_set_text_color(text_date_dow_layer, GColorWhite);
-	text_layer_set_text_alignment(text_date_dow_layer, GTextAlignmentCenter);
-	text_layer_set_background_color(text_date_dow_layer, GColorClear);
-	text_layer_set_font(text_date_dow_layer, font_21);
-	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_date_dow_layer));
+	// Status layers
+	{
+		// 3 beside each other:
+		// watch batt      bluetooth     phone batt
+		GRect status_rect = { .origin = { STATUS_X, STATUS_Y },
+				      .size = { STATUS_WIDTH, STATUS_HEIGHT } };
+		status_layer = layer_create(status_rect);
 
-	// Date layer
-	text_date_layer = text_layer_create((GRect) { .origin = { SCREEN_DATE_X, SCREEN_DATE_Y },
-				.size = { SCREEN_DATE_WIDTH, SCREEN_DATE_HEIGHT } });
-	text_layer_set_text_alignment(text_date_layer, GTextAlignmentCenter);
-	text_layer_set_text_color(text_date_layer, GColorWhite);
-	text_layer_set_background_color(text_date_layer, GColorClear);
-	text_layer_set_font(text_date_layer, font_21);
-	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_date_layer));
+		int layer_w = STATUS_WIDTH / 3.0;
+		status_watch_battery_layer = layer_create((GRect) { .origin = { 0, 0 },
+					.size = { layer_w, STATUS_HEIGHT } });
+		status_bluetooth_warn_layer = text_layer_create((GRect) { .origin = { layer_w, 0 },
+					.size = { layer_w, STATUS_HEIGHT } });
+		status_phone_battery_layer = layer_create((GRect) { .origin = { STATUS_WIDTH - layer_w, 0 },
+					.size = { layer_w, STATUS_HEIGHT } });
 
-	// Time layer
-	text_time_layer = text_layer_create((GRect) { .origin = { SCREEN_TIME_X, SCREEN_TIME_Y },
-				.size = { SCREEN_TIME_WIDTH, SCREEN_TIME_HEIGHT } });
-	text_layer_set_text_alignment(text_time_layer, GTextAlignmentCenter);
-	text_layer_set_text_color(text_time_layer, GColorWhite);
-	text_layer_set_background_color(text_time_layer, GColorClear);
-	text_layer_set_font(text_time_layer, font_49_numbers);
-	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_time_layer));
+		layer_set_update_proc(status_watch_battery_layer, draw_battery_watch_callback);
+		layer_set_update_proc(status_phone_battery_layer, draw_battery_phone_callback);
 
+		text_layer_set_text_color(status_bluetooth_warn_layer, GColorWhite);
+		text_layer_set_text_alignment(status_bluetooth_warn_layer, GTextAlignmentCenter);
+		text_layer_set_background_color(status_bluetooth_warn_layer, GColorClear);
+		text_layer_set_font(status_bluetooth_warn_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 
-	// AM/PM layer
-	text_time_ampm_layer = text_layer_create((GRect) { .origin = { SCREEN_TIME_AMPM_X, SCREEN_TIME_AMPM_Y },
-				.size = { SCREEN_TIME_AMPM_WIDTH, SCREEN_TIME_AMPM_HEIGHT } });
-	text_layer_set_text_color(text_time_layer, GColorWhite);
-	text_layer_set_text_alignment(text_time_ampm_layer, GTextAlignmentCenter);
-	text_layer_set_background_color(text_time_ampm_layer, GColorClear);
-	text_layer_set_font(text_time_ampm_layer, font_21);
-	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_time_ampm_layer));
+		layer_add_child(status_layer, status_watch_battery_layer);
+		layer_add_child(status_layer, status_phone_battery_layer);
+		layer_add_child(status_layer, text_layer_get_layer(status_bluetooth_warn_layer));
 
-	// Watch Battery layer
-	text_battery_watch_layer = text_layer_create((GRect) { .origin = { WATCH_BATTERY_X, WATCH_BATTERY_Y },
-				.size = { WATCH_BATTERY_WIDTH, WATCH_BATTERY_HEIGHT } });
-	text_layer_set_text_color(text_battery_watch_layer, GColorWhite);
-	text_layer_set_text_alignment(text_battery_watch_layer, GTextAlignmentLeft);
-	text_layer_set_background_color(text_battery_watch_layer, GColorClear);
-	text_layer_set_font(text_battery_watch_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_battery_watch_layer));
+		layer_add_child(window_get_root_layer(win), status_layer);
+	}
 
-	// Phone Battery layer
-	text_battery_phone_layer = text_layer_create((GRect) { .origin = { PHONE_BATTERY_X, PHONE_BATTERY_Y },
-				.size = { PHONE_BATTERY_WIDTH, PHONE_BATTERY_HEIGHT } });
-	text_layer_set_text_color(text_battery_phone_layer, GColorWhite);
-	text_layer_set_text_alignment(text_battery_phone_layer, GTextAlignmentCenter);
-	text_layer_set_background_color(text_battery_phone_layer, GColorClear);
-	text_layer_set_font(text_battery_phone_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_battery_phone_layer));
+	// Date layers
+	{
+		// 2 on top of each other:
+		// Sunday
+		// 2014-03-30
+		GRect date_rect = { .origin = { DATE_X, DATE_Y },
+				    .size = { DATE_WIDTH, DATE_HEIGHT } };
 
-	// Temperature layer
-	text_temperature_layer = text_layer_create((GRect) { .origin = { TEMPERATURE_X, TEMPERATURE_Y },
-				.size = { TEMPERATURE_WIDTH, TEMPERATURE_HEIGHT } });
-	text_layer_set_text_color(text_temperature_layer, GColorWhite);
-	text_layer_set_text_alignment(text_temperature_layer, GTextAlignmentRight);
-	text_layer_set_background_color(text_temperature_layer, GColorClear);
-	text_layer_set_font(text_temperature_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_temperature_layer));
+		date_layer = layer_create(date_rect);
 
-	// Bluetooth warning layer
-	bitmap_bluetooth_warn = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_NO_BLUETOOTH);
-	bitmap_bluetooth_layer = bitmap_layer_create((GRect) { .origin = { BLUETOOTH_WARN_X, BLUETOOTH_WARN_Y },
-				.size = { BLUETOOTH_WARN_WIDTH, BLUETOOTH_WARN_HEIGHT } });
-	bitmap_layer_set_bitmap(bitmap_bluetooth_layer, bitmap_bluetooth_warn);
-	bitmap_layer_set_alignment(bitmap_bluetooth_layer, GAlignCenter);
-	layer_add_child(window_get_root_layer(win),
-			bitmap_layer_get_layer(bitmap_bluetooth_layer));
+		int layer_h = DATE_HEIGHT / 2.0;
+		date_dow_layer = text_layer_create((GRect) { .origin = { 0, 0 },
+					.size = { DATE_WIDTH, layer_h } });
+		date_text_layer = text_layer_create((GRect) { .origin = { 0, 0 + layer_h },
+					.size = { DATE_WIDTH, layer_h } });
+
+		text_layer_set_text_color(date_dow_layer, GColorWhite);
+		text_layer_set_text_alignment(date_dow_layer, GTextAlignmentCenter);
+		text_layer_set_background_color(date_dow_layer, GColorClear);
+		text_layer_set_font(date_dow_layer, font_21);
+
+		text_layer_set_text_color(date_text_layer, GColorWhite);
+		text_layer_set_text_alignment(date_text_layer, GTextAlignmentCenter);
+		text_layer_set_background_color(date_text_layer, GColorClear);
+		text_layer_set_font(date_text_layer, font_21);
+
+		layer_add_child(date_layer, text_layer_get_layer(date_dow_layer));
+		layer_add_child(date_layer, text_layer_get_layer(date_text_layer));
+
+		layer_add_child(window_get_root_layer(win), date_layer);
+	}
+
+	// Time layers
+	{
+		// Big time
+		GRect time_rect = { .origin = { TIME_X, TIME_Y },
+				    .size = { TIME_WIDTH, TIME_HEIGHT } };
+
+		time_layer = layer_create(time_rect);
+
+		time_text_layer = text_layer_create((GRect) { .origin = { 0, 0 },
+					.size = { TIME_WIDTH, TIME_HEIGHT } });
+
+		text_layer_set_text_color(time_text_layer, GColorWhite);
+		text_layer_set_text_alignment(time_text_layer, GTextAlignmentCenter);
+		text_layer_set_background_color(time_text_layer, GColorClear);
+		text_layer_set_font(time_text_layer, font_49_numbers);
+
+		layer_add_child(time_layer, text_layer_get_layer(time_text_layer));
+
+		layer_add_child(window_get_root_layer(win), time_layer);
+	}
+
+	// Weather layer
+	{
+		GRect weather_rect = { .origin = { WEATHER_X, WEATHER_Y },
+				       .size = { WEATHER_WIDTH, WEATHER_HEIGHT } };
+
+		weather_layer = layer_create(weather_rect);
+
+		// Two layers, each half the width
+		// conditions        temperature
+		int half_w = WEATHER_WIDTH / 2.0;
+
+		// XXX create weather icon bitmaps
+		weather_cond_layer = bitmap_layer_create((GRect) { .origin = { 0, 0 },
+					.size = { half_w, WEATHER_HEIGHT } });
+		weather_temp_layer = text_layer_create((GRect) { .origin = { half_w, 15 },
+					.size = { half_w, WEATHER_HEIGHT } });
+
+		weather_cond_bitmap = gbitmap_create_with_resource(WEATHER_ICONS[WEATHER_ICON_NONE]);
+		bitmap_layer_set_bitmap(weather_cond_layer, weather_cond_bitmap);
+
+		text_layer_set_text_color(weather_temp_layer, GColorWhite);
+		text_layer_set_text_alignment(weather_temp_layer, GTextAlignmentCenter);
+		text_layer_set_background_color(weather_temp_layer, GColorClear);
+		text_layer_set_font(weather_temp_layer, font_21);
+
+		layer_add_child(weather_layer, bitmap_layer_get_layer(weather_cond_layer));
+		layer_add_child(weather_layer, text_layer_get_layer(weather_temp_layer));
+
+		layer_add_child(window_get_root_layer(win), weather_layer);
+	}
 }
 
 static void window_appear(Window* win) {
@@ -493,15 +554,10 @@ static void window_appear(Window* win) {
 	draw_dayofweek(ptime);
 	draw_date(ptime);
 	draw_time(ptime);
-	draw_battery_watch(battery_state_service_peek());
+	draw_bluetooth_warning(bluetooth_connection_service_peek());
 
 	// Draw the last known state of the phone information.
-	draw_battery_phone(phone_battery_state);
 	draw_weather(weather_info);
-
-	// If bluetooth is connected (the normal state of things),
-	// don't show the layer yet.
-	layer_set_hidden((Layer*) bitmap_bluetooth_layer, bluetooth_connection_service_peek());
 
 	Tuplet initial_message_values[] = {
 		TupletInteger(PHONE_BATTERY_PERCENT, (uint8_t) 0),
@@ -526,16 +582,22 @@ static void window_unload(Window *win) {
 
 	app_sync_deinit(&sync);
 
-	gbitmap_destroy(bitmap_bluetooth_warn);
-	bitmap_layer_destroy(bitmap_bluetooth_layer);
+	gbitmap_destroy(weather_cond_bitmap);
+	bitmap_layer_destroy(weather_cond_layer);
+	text_layer_destroy(weather_temp_layer);
+	layer_destroy(weather_layer);
 
-	text_layer_destroy(text_temperature_layer);
-	text_layer_destroy(text_battery_phone_layer);
-	text_layer_destroy(text_battery_watch_layer);
-	text_layer_destroy(text_time_ampm_layer);
-	text_layer_destroy(text_time_layer);
-	text_layer_destroy(text_date_layer);
-	text_layer_destroy(text_date_dow_layer);
+	text_layer_destroy(time_text_layer);
+	layer_destroy(time_layer);
+
+	text_layer_destroy(date_text_layer);
+	text_layer_destroy(date_dow_layer);
+	layer_destroy(date_layer);
+
+	text_layer_destroy(status_bluetooth_warn_layer);
+	layer_destroy(status_phone_battery_layer);
+	layer_destroy(status_watch_battery_layer);
+	layer_destroy(status_layer);
 }
 
 void do_init() {
@@ -576,8 +638,6 @@ void do_deinit(void) {
 	battery_state_service_unsubscribe();
 	bluetooth_connection_service_unsubscribe();
 
-	// XXX TODO Release other layers?
-	//window_unload(window) should have been called to destroy layers?
 	window_destroy(window);
 
 	fonts_unload_custom_font(font_49_numbers);

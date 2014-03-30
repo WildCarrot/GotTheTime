@@ -10,7 +10,8 @@ TODOs for my watch face
   CLOSED: [2014-03-30 Sun 05:28]
   So I can see if the weather is up to date or not (and phone battery)
 * TODO Adjust the graphics a bit
-* TODO Draw weather icon
+* DONE Draw weather icon
+  CLOSED: [2014-03-30 Sun 16:00]
 * TODO Add seconds display (small and to the right of AM/PM?)
 
 
@@ -39,6 +40,7 @@ TODOs for my watch face
   It doesn't have a retry.
 * DONE Send message to phone app to trigger weather/battery when watchface first loads
   CLOSED: [2014-03-30 Sun 10:02]
+* TODO Timezone?
 * For the phone app
 * TODO Add controls for how often the watch should be updated
 
