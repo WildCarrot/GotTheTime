@@ -3,12 +3,12 @@
   "shortName": "GotTheTime",
   "longName": "GotTheTime Watchface",
   "companyName": "Build Something Awesome",
-  "versionCode": 3,
-  "versionLabel": "1.2.0",
+  "versionCode": 4,
+  "versionLabel": "1.3.0",
   "watchapp": {
     "watchface": true
   },
-  "capabilities": [ "location", "configurable", "battery" ],
+  "capabilities": [],
   "appKeys": {
       "WEATHER_MESSAGE_ICON": 0,
       "WEATHER_MESSAGE_TEMPERATURE": 1,

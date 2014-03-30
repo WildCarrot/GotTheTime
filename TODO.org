@@ -1,8 +1,16 @@
 TODOs for my watch face
 
 * Anytime
-* TODO Add timer/graphic when haven't heard from phone in a while
+* DONE Refactor the drawing of the watchface
+  CLOSED: [2014-03-30 Sun 10:00]
+  It's kind of a mess now and I want to tweak the layout a bit
+* DONE Change to sending number for temperature
+  CLOSED: [2014-03-30 Sun 10:01]
+* DONE Add timer/graphic when haven't heard from phone in a while
+  CLOSED: [2014-03-30 Sun 05:28]
   So I can see if the weather is up to date or not (and phone battery)
+* TODO Adjust the graphics a bit
+* TODO Draw weather icon
 * TODO Add seconds display (small and to the right of AM/PM?)
 
 
@@ -21,11 +29,16 @@ TODOs for my watch face
   :END:
   Adding an icon instead and vibe when lose contact.
 * TODO Add number of meetings or timezone
-* TODO Figure out why getting an APP_MSG_BUSY when first start the phone app
+* DONE Figure out why getting an APP_MSG_BUSY when first start the phone app
+  CLOSED: [2014-03-30 Sun 10:02]
   <2014-03-22 Sat>
   Probably a race.  The error means there are pending messages (either inbound
   or outbound) that need to be processed first.
-* TODO Send message to phone app to trigger weather/battery when watchface first loads
+  <2014-03-30 Sun>
+  Also, the phone app will send two messages, one for weather and one for battery.
+  It doesn't have a retry.
+* DONE Send message to phone app to trigger weather/battery when watchface first loads
+  CLOSED: [2014-03-30 Sun 10:02]
 * For the phone app
 * TODO Add controls for how often the watch should be updated
 
@@ -35,3 +48,5 @@ TODOs for my watch face
   and js-configure-demo
   Doesn't seem possible yet to get the phone's battery, even though there's a
   javascript way to do it.
+
+  <2014-03-30 Sun> But, it seems flaky as hell.  Going back to using the phone app.

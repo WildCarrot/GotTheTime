@@ -1,6 +1,7 @@
 /*
 Watch face with date and time like I like them.
 General layout is below (not to scale).
+Used "Simplicity" watchface as a guide, but I want the day of the week.
 
 +------------+
 |   Sunday   |
@@ -11,14 +12,15 @@ General layout is below (not to scale).
 | w:--  p:-- | <<< battery indicator for watch and phone, temperature (from phone app)
 +------------+
 
-Vibrate on the hour, when enabled.  (Enabled by default.)
-
-Used "Simplicity" watchface as a guide, but I want the day of the week.
+- Vibrate on the hour, when enabled.  (Enabled by default.)
+- Vibrate and display graphic when Bluetooth disconnected.
 
 */
 
 #include <pebble.h>
 #include <time.h>
+
+// ---------- Screen Locations ------------------------------
 
 /* Seems like these should be defined somewhere. */
 #define SCREEN_WIDTH  144
@@ -36,33 +38,33 @@ Used "Simplicity" watchface as a guide, but I want the day of the week.
 
 // I think the drawing of text is smart enough to use the upper-left
 // corner of where you want to draw text and not the baseline.
-#define SCREEN_DATE_X DRAW_INSET
-#define SCREEN_DATE_Y 3
-#define SCREEN_DATE_WIDTH  DRAW_WIDTH
-#define SCREEN_DATE_HEIGHT 26 // SMALL_FONT_HEIGHT + FONT_PAD_Y + 4 to make room for descent of "y" in "Thursday"
+#define SCREEN_DATE_DOW_X DRAW_INSET
+#define SCREEN_DATE_DOW_Y 3
+#define SCREEN_DATE_DOW_WIDTH  DRAW_WIDTH
+#define SCREEN_DATE_DOW_HEIGHT 26 // SMALL_FONT_HEIGHT + FONT_PAD_Y + 4 to make room for descent of "y" in "Thursday"
 
 #define SCREEN_TIME_X DRAW_INSET
 #define SCREEN_TIME_Y 59 // SCREEN_MIDDLE_Y - LARGE_FONT_HEIGHT/2
 #define SCREEN_TIME_WIDTH  DRAW_WIDTH
 #define SCREEN_TIME_HEIGHT 51 // LARGE_FONT_HEIGHT + FONT_PAD_Y
 
-#define LOWER_DATE_X DRAW_INSET
-#define LOWER_DATE_Y 28 // SCREEN_DATE_Y + SCREEN_DATE_HEIGHT
-#define LOWER_DATE_WIDTH  SCREEN_DATE_WIDTH
-#define LOWER_DATE_HEIGHT 31 // SMALL_FONT_HEIGHT + FONT_PAD_Y
+#define SCREEN_DATE_X DRAW_INSET
+#define SCREEN_DATE_Y 28 // SCREEN_DATE_Y + SCREEN_DATE_HEIGHT
+#define SCREEN_DATE_WIDTH  SCREEN_DATE_DOW_WIDTH
+#define SCREEN_DATE_HEIGHT 31 // SMALL_FONT_HEIGHT + FONT_PAD_Y
 
-#define LOWER_TIME_X 32 // DRAW_INSET + 32
-#define LOWER_TIME_Y 112 // SCREEN_TIME_Y + SCREEN_TIME_HEIGHT + FONT_PAD_Y
-#define LOWER_TIME_WIDTH  121 // SCREEN_TIME_WIDTH - 15 (for inset)
-#define LOWER_TIME_HEIGHT 31 // SMALL_FONT_HEIGHT
+#define SCREEN_TIME_AMPM_X 32 // DRAW_INSET + 32
+#define SCREEN_TIME_AMPM_Y 112 // SCREEN_TIME_Y + SCREEN_TIME_HEIGHT + FONT_PAD_Y
+#define SCREEN_TIME_AMPM_WIDTH  121 // SCREEN_TIME_WIDTH - 15 (for inset)
+#define SCREEN_TIME_AMPM_HEIGHT 31 // SMALL_FONT_HEIGHT
 
 #define BLUETOOTH_WARN_X DRAW_INSET
-#define BLUETOOTH_WARN_Y 114 // LOWER_TIME_Y + FONT_PAD_Y
+#define BLUETOOTH_WARN_Y 114 // SCREEN_TIME_AMPM_Y + FONT_PAD_Y
 #define BLUETOOTH_WARN_WIDTH  32
 #define BLUETOOTH_WARN_HEIGHT 32
 
 #define WATCH_BATTERY_X DRAW_INSET
-#define WATCH_BATTERY_Y 145 // LOWER_TIME_Y + LOWER_TIME_HEIGHT + FONT_PAD_Y
+#define WATCH_BATTERY_Y 145 // SCREEN_TIME_AMPM_Y + SCREEN_TIME_AMPM_HEIGHT + FONT_PAD_Y
 #define WATCH_BATTERY_WIDTH 48 // DRAW_WIDTH / 3
 #define WATCH_BATTERY_HEIGHT 31 // SMALL_FONT_HEIGHT (can get away with less b/c no descending characters)
 
@@ -76,63 +78,15 @@ Used "Simplicity" watchface as a guide, but I want the day of the week.
 #define TEMPERATURE_WIDTH PHONE_BATTERY_WIDTH
 #define TEMPERATURE_HEIGHT PHONE_BATTERY_HEIGHT
 
+// ---------- Options and vibes ------------------------------
+
 #define VIBRATE_HOURLY 1 // Change to 0 to disable
 
-#define ALL_TIME_CHANGED (SECOND_UNIT | MINUTE_UNIT | HOUR_UNIT | DAY_UNIT | MONTH_UNIT | YEAR_UNIT)
-
-typedef enum {
-	CHARGE_PERCENT_FIELD = 0x1,
-	IS_CHARGING_FIELD    = 0x2,
-	IS_PLUGGED_FIELD     = 0x4,
-} BatteryFields;
-
-#define ALL_BATTERY_CHANGED (CHARGE_PERCENT_FIELD | IS_CHARGING_FIELD | IS_PLUGGED_FIELD)
-
-typedef struct {
-	uint8_t icon_index;
-	const char* temperature_str;
-} Weather;
-
-typedef enum {
-	WEATHER_ICON_FIELD = 0x1,
-	WEATHER_TEMPERATURE_FIELD= 0x2,
-} WeatherFields;
-
-#define ALL_WEATHER_CHANGED (WEATHER_ICON_FIELD | WEATHER_TEMPERATURE_FIELD)
-
-// App Message values
-
-typedef enum {
-	WEATHER_MESSAGE_ICON = 0, // TUPLE_UINT
-	WEATHER_MESSAGE_TEMPERATURE = 1, // TUPLE_CSTRING
-	PHONE_BATTERY_PERCENT = 2, // TUPLE_UINT
-	PHONE_BATTERY_CHARGING = 3, // TUPLE_UINT
-	PHONE_BATTERY_PLUGGED = 4, // TUPLE_UINT
-} GTTMessageIndex; // GotTheTime App Message indexes
-
-#define INBOUND_MESSAGE_SIZE 64
-#define OUTBOUND_MESSAGE_SIZE 64
-
-// For getting information from the companion app on the phone.
-AppSync sync;
-uint8_t sync_buffer[64];
-
-
-Window* window;
-
-TextLayer* text_date_layer;
-TextLayer* text_time_layer;
-TextLayer* text_lower_date_layer;
-TextLayer* text_lower_time_layer;
-TextLayer* text_watch_battery_layer;
-TextLayer* text_phone_battery_layer;
-TextLayer* text_temperature_layer;
-
-BitmapLayer* bitmap_bluetooth_layer;
-GBitmap* bitmap_bluetooth_warn;
-
-GFont font_21;
-GFont font_49_numbers;
+// After losing bluetooth, the wait before the vibe/display is sent.
+// This should stop it from alerting on very short drops in bluetooth.
+#define BLUETOOTH_TIMEOUT_MS 5000
+AppTimer* bluetooth_timer = NULL;
+bool bluetooth_connected;
 
 // dit-dit-dit-dit = "H" in morse code. :)
 const VibePattern HOUR_VIBE_PATTERN = {
@@ -146,35 +100,77 @@ const VibePattern BLUETOOTH_WARN_VIBE_PATTERN = {
 	.num_segments = 8
 };
 
-void draw_screen(struct tm* ptime, TimeUnits units_changed,
-		 BatteryChargeState watch_battery, BatteryFields watch_battery_changed,
-		 BatteryChargeState phone_battery, BatteryFields phone_battery_changed,
-		 Weather weather, WeatherFields weather_changed) {
-	// Buffers we can format text into.
-	// Need to be static because they're used by the text layers
-	// even after this function completes.
+// ---------- Messages ------------------------------
+
+typedef enum {
+	PHONE_BATTERY_PERCENT = 0, // TUPLE_UINT
+	PHONE_BATTERY_CHARGING = 1, // TUPLE_UINT
+	PHONE_BATTERY_PLUGGED = 2, // TUPLE_UINT
+	WEATHER_MESSAGE_ICON = 3, // TUPLE_UINT
+	WEATHER_MESSAGE_TEMPERATURE = 4, // TUPLE_UINT
+} GTTMessageIndex; // GotTheTime App Message indexes
+
+#define INBOUND_MESSAGE_SIZE 64
+#define OUTBOUND_MESSAGE_SIZE 64
+
+// For getting information from the companion app on the phone.
+AppSync sync;
+uint8_t sync_buffer[64];
+
+typedef struct {
+	uint8_t icon;
+	int32_t temp;
+} WeatherInfo;
+
+// Last known state
+BatteryChargeState phone_battery_state;
+WeatherInfo weather_info;
+
+// ---------- Graphics layers and fonts ------------------------------
+
+Window* window;
+
+TextLayer* text_date_dow_layer;
+TextLayer* text_date_layer;
+TextLayer* text_time_layer;
+TextLayer* text_time_ampm_layer;
+TextLayer* text_battery_watch_layer;
+TextLayer* text_battery_phone_layer;
+TextLayer* text_temperature_layer;
+
+BitmapLayer* bitmap_bluetooth_layer;
+GBitmap* bitmap_bluetooth_warn;
+
+GFont font_21;
+GFont font_49_numbers;
+
+// ---------- Drawing functions ------------------------------
+
+void draw_dayofweek(struct tm* ptime) {
+	static char day_text[]  = "Xxxxxxxxxx"; // Wednesday
+
+	// Day of the week, full name
+	strftime(day_text, sizeof(day_text), "%A", ptime);
+	text_layer_set_text(text_date_dow_layer, day_text);
+}
+
+void draw_date(struct tm* ptime) {
+	static char date_text[] = "0000-00-00"; // 2013-10-02
+
+	// Date
+	strftime(date_text, sizeof(date_text), "%Y-%m-%d", ptime);
+	text_layer_set_text(text_date_layer, date_text);
+}
+
+void draw_time(struct tm* ptime) {
+	// Although this makes it different from the other "per line"
+	// drawing functions, the time is all related, so update all
+	// the time lines in the same function.
 	static char time_text[]  = "00:00";
-	static char date_text[]  = "Xxxxxxxxxx"; // Wednesday
-	static char lower_date[] = "0000-00-00"; // 2013-10-02
-	static char lower_time[] = "XX"; // AM
-	static char watch_battery_text[] = "w000% c"; // 0% - 100% c for "charging"
-	static char phone_battery_text[] = "p000% c"; // 0% - 100% c for "charging"
-	static char temperature_text[] = "0000pC"; // temperature
+	static char ampm[] = "XX"; // AM
+	char* time_format = NULL;
 
-	char *time_format;
-
-	// If the month or year changes, the day will change, too.
-	if (units_changed & DAY_UNIT) {
-		// Day of the week, full name
-		strftime(date_text, sizeof(date_text), "%A", ptime);
-		text_layer_set_text(text_date_layer, date_text);
-
-		// Date
-		strftime(lower_date, sizeof(lower_date), "%Y-%m-%d", ptime);
-		text_layer_set_text(text_lower_date_layer, lower_date);
-	}
-
-	// Time string: always set since we're called at init time or when the minute changes.
+	// Time, not including seconds
 	if (clock_is_24h_style()) {
 		time_format = "%R";
 	} else {
@@ -193,62 +189,51 @@ void draw_screen(struct tm* ptime, TimeUnits units_changed,
 
 	text_layer_set_text(text_time_layer, time_text);
 
-	if (VIBRATE_HOURLY && (units_changed & HOUR_UNIT)) {
-		// The very first time we draw the screen,
-		// the hours will have "changed".
-		// Don't vibe in that case, only when the minutes are zero.
-		if (ptime->tm_min == 0) {
-			vibes_enqueue_custom_pattern(HOUR_VIBE_PATTERN);
-		}
+	if (VIBRATE_HOURLY && (ptime->tm_min == 0)) {
+		vibes_enqueue_custom_pattern(HOUR_VIBE_PATTERN);
 	}
 
 	// Set the AM/PM, if needed.
 	if (!clock_is_24h_style()) {
-		strftime(lower_time, sizeof(lower_time), "%p", ptime);
-		text_layer_set_text(text_lower_time_layer, lower_time);
-	}
-
-	// Update the battery text, if it changed.
-	// XXX Change from text to a drawing!
-	// Since this is using the same text layer, update for either one changing.
-	if ((watch_battery_changed & CHARGE_PERCENT_FIELD) ||
-	    (watch_battery_changed & IS_CHARGING_FIELD)) {
-		char watch_charging = ((watch_battery_changed & IS_CHARGING_FIELD) && watch_battery.is_charging)? 'c': ' ';
-		snprintf(watch_battery_text, sizeof(watch_battery_text), "%3d%%%c",
-			 watch_battery.charge_percent, watch_charging);
-	}
-	// XXX If drawing the other fields (charging/plugged), test and draw those.
-	if (watch_battery_changed) {
-		text_layer_set_text(text_watch_battery_layer, watch_battery_text);
-	}
-
-	APP_LOG(APP_LOG_LEVEL_DEBUG, "phone_battery: %d %d %d  changed: %x",
-		phone_battery.charge_percent,
-		phone_battery.is_charging,
-		phone_battery.is_plugged, phone_battery_changed);
-	if ((phone_battery_changed & CHARGE_PERCENT_FIELD) ||
-	    (phone_battery_changed & IS_CHARGING_FIELD)) {
-		char phone_charging = ((phone_battery_changed & IS_CHARGING_FIELD) && phone_battery.is_charging)? 'c': ' ';
-		snprintf(phone_battery_text, sizeof(phone_battery_text), "%3d%%%c",
-			 phone_battery.charge_percent, phone_charging);
-	}
-	// XXX If drawing the other fields (charging/plugged), test and draw those.
-	if (phone_battery_changed) {
-		text_layer_set_text(text_phone_battery_layer, phone_battery_text);
-	}
-
-	// Update the temperature text, if it changed.
-	// XXX update to include graphics!
-	if (weather_changed & WEATHER_TEMPERATURE_FIELD) {
-		snprintf(temperature_text, sizeof(temperature_text), "%s", weather.temperature_str);
-	}
-	if (weather_changed) {
-		text_layer_set_text(text_temperature_layer, temperature_text);
+		strftime(ampm, sizeof(ampm), "%p", ptime);
+		text_layer_set_text(text_time_ampm_layer, ampm);
 	}
 }
 
+void battery_text_common(BatteryChargeState batt, char* text, uint16_t text_len) {
+	char charging = (batt.is_charging)? 'c': ' ';
+	if (batt.is_plugged) {
+		charging = 'p';
+	}
+	snprintf(text, text_len, "%3d%%%c", batt.charge_percent, charging);
+}
+
+void draw_battery_watch(BatteryChargeState batt) {
+	static char watch_battery_text[] = "000%c"; // 0% - 100% c for "charging"
+
+	battery_text_common(batt, watch_battery_text, sizeof(watch_battery_text));
+	text_layer_set_text(text_battery_watch_layer, watch_battery_text);
+}
+
+void draw_battery_phone(BatteryChargeState batt) {
+	static char phone_battery_text[] = "000%c"; // 0% - 100% c for "charging"
+
+	battery_text_common(batt, phone_battery_text, sizeof(phone_battery_text));
+	text_layer_set_text(text_battery_phone_layer, phone_battery_text);
+}
+
+void draw_weather(WeatherInfo winfo) {
+	static char temperature_text[] = "000%C"; // temperature
+
+	snprintf(temperature_text, sizeof(temperature_text), "%3d\u00B0", (int) winfo.temp);
+	text_layer_set_text(text_temperature_layer, temperature_text);
+}
+
+
+// ---------- Message functions ------------------------------
+
 static void sync_error_callback(DictionaryResult dict_err, AppMessageResult app_msg_err, void* context) {
-	APP_LOG(APP_LOG_LEVEL_DEBUG, "App message sync error: %d", app_msg_err);
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s %d", __FUNCTION__, app_msg_err);
 
 #define case_log_enum(e) case e: APP_LOG(APP_LOG_LEVEL_DEBUG, #e); break
 
@@ -293,84 +278,150 @@ static void send_message(void) {
 	app_message_outbox_send();
 }
 
+static void send_message_callback(void* ignored) {
+	send_message();
+}
 
-static void sync_tuple_changed_callback(const uint32_t key, const Tuple* new_values, const Tuple* old_values, void* context) {
-	Weather w;
-	WeatherFields wfields = 0;
-	BatteryChargeState b;
-	BatteryFields bfields = 0;
-
-	memset(&w, 0, sizeof(w));
-	memset(&b, 0, sizeof(b));
+static void sync_tuple_changed_callback(const uint32_t key,
+					const Tuple* new_values,
+					const Tuple* old_values,
+					void* context)
+{
+	bool update_battery = false;
+	bool update_weather = false;
 
 	switch (key) {
-	case WEATHER_MESSAGE_ICON:
-		if (new_values && new_values->value) {
-			wfields |= WEATHER_ICON_FIELD;
-			w.icon_index = new_values->value->uint8;
-		}
-
-		if (old_values && new_values && old_values->value && new_values->value) {
-			APP_LOG(APP_LOG_LEVEL_DEBUG, "Icon changed: old=%d new=%d",
-				old_values->value->uint8,
-				new_values->value->uint8);
-		}
-		break;
-	case WEATHER_MESSAGE_TEMPERATURE:
-		// new_values are stored in the global sync_buffer, so we can use it
-		// directly.  draw_screen will make a local copy for the text layer anyway.
-		// directly in the text layer
-		if (new_values && new_values->value) {
-			wfields |= WEATHER_TEMPERATURE_FIELD;
-			w.temperature_str = new_values->value->cstring;
-			APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature changed: %x %x %x",
-				w.temperature_str[0], w.temperature_str[1],
-				w.temperature_str[2]);
-		}
-		break;
-
-// XXX When we get values from the App, we'll get them one at a time in the
-// sync_tuple_changed_callback.  We need/want all the battery info at the same
-// time to correctly draw the phone's battery state.
-// Rather than solve that now, I'm going to ignore the charging/plugged info.
-// Another way would be to save the old value and only update the fields that have
-// new info.  Icky.
 
 	case PHONE_BATTERY_PERCENT:
 		if (new_values && new_values->value) {
-			b.charge_percent = new_values->value->uint8;
-			bfields |= CHARGE_PERCENT_FIELD;
-			APP_LOG(APP_LOG_LEVEL_DEBUG, "Battery percent: %d", b.charge_percent);
+			phone_battery_state.charge_percent = new_values->value->uint8;
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "%s PHONE_BATTERY_PERCENT: %d",
+				__FUNCTION__, phone_battery_state.charge_percent);
+			update_battery = true;
 		}
 		break;
 	case PHONE_BATTERY_CHARGING:
-		/* if (new_values && new_values->value) { */
-		/* 	b.is_charging = new_values->value->uint8; */
-		/* 	bfields |= IS_CHARGING_FIELD; */
-		/* 	APP_LOG(APP_LOG_LEVEL_DEBUG, "Battery charging: %d", b.is_charging); */
-		/* } */
+		if (new_values && new_values->value) {
+			phone_battery_state.is_charging = new_values->value->uint8;
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "%s PHONE_BATTERY_CHARGING: %d",
+				__FUNCTION__, phone_battery_state.is_charging);
+			update_battery = true;
+		}
 		break;
 	case PHONE_BATTERY_PLUGGED:
-		/* if (new_values && new_values->value) { */
-		/* 	b.is_plugged = new_values->value->uint8; */
-		/* 	bfields |= IS_PLUGGED_FIELD; */
-		/* 	APP_LOG(APP_LOG_LEVEL_DEBUG, "Battery plugged: %d", b.is_plugged); */
-		/* } */
+		if (new_values && new_values->value) {
+			phone_battery_state.is_plugged = new_values->value->uint8;
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "%s PHONE_BATTERY_PLUGGED: %d",
+				__FUNCTION__, phone_battery_state.is_plugged);
+			update_battery = true;
+		}
 		break;
+
+	case WEATHER_MESSAGE_ICON:
+		// XXX Not actually using this yet
+		if (new_values && new_values->value) {
+			weather_info.icon = new_values->value->uint8;
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "%s WEATHER_MESSAGE_ICON: %d",
+				__FUNCTION__, weather_info.icon);
+			update_weather = true;
+		}
+		break;
+	case WEATHER_MESSAGE_TEMPERATURE:
+		if (new_values && new_values->value) {
+			weather_info.temp = new_values->value->uint8;
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "%s WEATHER_MESSAGE_TEMPERATURE: %d",
+				__FUNCTION__, (int) weather_info.temp);
+			update_weather = true;
+		}
+		break;
+
 	};
 
-	time_t now = time(NULL);
+	if (update_battery) {
+		draw_battery_phone(phone_battery_state);
+	}
 
-	draw_screen(localtime(&now), 0,
-		    battery_state_service_peek(), 0,
-		    b, bfields,
-		    w, wfields);
+	if (update_weather) {
+		draw_weather(weather_info);
+	}
 }
+
+
+// ---------- Timer and watch update functions ------------------------------
+
+void handle_minute_tick(struct tm* tick_time, TimeUnits units_changed) {
+
+	// If the month or year changes, the day will change, too.
+	if (units_changed & DAY_UNIT) {
+		draw_dayofweek(tick_time);
+		draw_date(tick_time);
+	}
+	draw_time(tick_time);
+}
+
+void handle_battery_update(BatteryChargeState charge_state) {
+	draw_battery_watch(charge_state);
+}
+
+void bluetooth_timer_callback(void* data) {
+	bool connected = *((bool*) data);
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s %s", __FUNCTION__, (connected? "true": "false"));
+
+	// If connected, clear the area (or, hide the layer).
+	// If disconnected, show the graphic/layer.
+	layer_set_hidden((Layer*) bitmap_bluetooth_layer, connected);
+
+	if (!connected) {
+		vibes_enqueue_custom_pattern(BLUETOOTH_WARN_VIBE_PATTERN);
+	}
+}
+
+void handle_bluetooth_update(bool connected)
+{
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s %s", __FUNCTION__, (connected? "true": "false"));
+	bluetooth_connected = connected;
+
+	if (connected) {
+		// If we had a timer in-flight, just expire it now
+		// and let it hide the warning.
+		if (bluetooth_timer) {
+			app_timer_reschedule(bluetooth_timer, 0);
+		}
+	}
+	else {
+		// Don't show/buzz right away, wait for a few seconds.
+		if (bluetooth_timer) {
+			// If there was already a disconnect timer in-flight,
+			// just push the time out since we must have
+			// disconnected twice while the timer was outstanding.
+			app_timer_reschedule(bluetooth_timer,
+					     BLUETOOTH_TIMEOUT_MS);
+		}
+		else {
+			bluetooth_timer = app_timer_register(BLUETOOTH_TIMEOUT_MS,
+							     bluetooth_timer_callback,
+							     &bluetooth_connected);
+		}
+	}
+}
+
+
+// ---------- Window functions ------------------------------
 
 static void window_load(Window* win) {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 	// XXX TODO Base width/height on actual frame bounds.
 	// Eg bounds.size.w for width of frame
+
+	// Day of week layer
+	text_date_dow_layer = text_layer_create((GRect) { .origin = { SCREEN_DATE_DOW_X, SCREEN_DATE_DOW_Y },
+				.size = { SCREEN_DATE_DOW_WIDTH, SCREEN_DATE_DOW_HEIGHT } });
+	text_layer_set_text_color(text_date_dow_layer, GColorWhite);
+	text_layer_set_text_alignment(text_date_dow_layer, GTextAlignmentCenter);
+	text_layer_set_background_color(text_date_dow_layer, GColorClear);
+	text_layer_set_font(text_date_dow_layer, font_21);
+	layer_add_child(window_get_root_layer(win),
+			text_layer_get_layer(text_date_dow_layer));
 
 	// Date layer
 	text_date_layer = text_layer_create((GRect) { .origin = { SCREEN_DATE_X, SCREEN_DATE_Y },
@@ -378,7 +429,6 @@ static void window_load(Window* win) {
 	text_layer_set_text_alignment(text_date_layer, GTextAlignmentCenter);
 	text_layer_set_text_color(text_date_layer, GColorWhite);
 	text_layer_set_background_color(text_date_layer, GColorClear);
-	//text_layer_set_font(text_date_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
 	text_layer_set_font(text_date_layer, font_21);
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_date_layer));
@@ -389,52 +439,40 @@ static void window_load(Window* win) {
 	text_layer_set_text_alignment(text_time_layer, GTextAlignmentCenter);
 	text_layer_set_text_color(text_time_layer, GColorWhite);
 	text_layer_set_background_color(text_time_layer, GColorClear);
-//	text_layer_set_font(text_time_layer, fonts_get_system_font(FONT_KEY_ROBOTO_BOLD_SUBSET_49));
 	text_layer_set_font(text_time_layer, font_49_numbers);
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_time_layer));
 
-	// Lower date layer
-	text_lower_date_layer = text_layer_create((GRect) { .origin = { LOWER_DATE_X, LOWER_DATE_Y },
-				.size = { LOWER_DATE_WIDTH, LOWER_DATE_HEIGHT } });
-	text_layer_set_text_color(text_lower_date_layer, GColorWhite);
-	text_layer_set_text_alignment(text_lower_date_layer, GTextAlignmentCenter);
-	text_layer_set_background_color(text_lower_date_layer, GColorClear);
-//	text_layer_set_font(text_lower_date_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
-	text_layer_set_font(text_lower_date_layer, font_21);
-	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_lower_date_layer));
 
-	// Lower text layer
-	text_lower_time_layer = text_layer_create((GRect) { .origin = { LOWER_TIME_X, LOWER_TIME_Y },
-				.size = { LOWER_TIME_WIDTH, LOWER_TIME_HEIGHT } });
-	text_layer_set_text_color(text_lower_time_layer, GColorWhite);
-	text_layer_set_text_alignment(text_lower_time_layer, GTextAlignmentCenter);
-	text_layer_set_background_color(text_lower_time_layer, GColorClear);
-//	text_layer_set_font(text_lower_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
-	text_layer_set_font(text_lower_time_layer, font_21);
+	// AM/PM layer
+	text_time_ampm_layer = text_layer_create((GRect) { .origin = { SCREEN_TIME_AMPM_X, SCREEN_TIME_AMPM_Y },
+				.size = { SCREEN_TIME_AMPM_WIDTH, SCREEN_TIME_AMPM_HEIGHT } });
+	text_layer_set_text_color(text_time_layer, GColorWhite);
+	text_layer_set_text_alignment(text_time_ampm_layer, GTextAlignmentCenter);
+	text_layer_set_background_color(text_time_ampm_layer, GColorClear);
+	text_layer_set_font(text_time_ampm_layer, font_21);
 	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_lower_time_layer));
+			text_layer_get_layer(text_time_ampm_layer));
 
 	// Watch Battery layer
-	text_watch_battery_layer = text_layer_create((GRect) { .origin = { WATCH_BATTERY_X, WATCH_BATTERY_Y },
+	text_battery_watch_layer = text_layer_create((GRect) { .origin = { WATCH_BATTERY_X, WATCH_BATTERY_Y },
 				.size = { WATCH_BATTERY_WIDTH, WATCH_BATTERY_HEIGHT } });
-	text_layer_set_text_color(text_watch_battery_layer, GColorWhite);
-	text_layer_set_text_alignment(text_watch_battery_layer, GTextAlignmentLeft);
-	text_layer_set_background_color(text_watch_battery_layer, GColorClear);
-	text_layer_set_font(text_watch_battery_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
+	text_layer_set_text_color(text_battery_watch_layer, GColorWhite);
+	text_layer_set_text_alignment(text_battery_watch_layer, GTextAlignmentLeft);
+	text_layer_set_background_color(text_battery_watch_layer, GColorClear);
+	text_layer_set_font(text_battery_watch_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
 	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_watch_battery_layer));
+			text_layer_get_layer(text_battery_watch_layer));
 
 	// Phone Battery layer
-	text_phone_battery_layer = text_layer_create((GRect) { .origin = { PHONE_BATTERY_X, PHONE_BATTERY_Y },
+	text_battery_phone_layer = text_layer_create((GRect) { .origin = { PHONE_BATTERY_X, PHONE_BATTERY_Y },
 				.size = { PHONE_BATTERY_WIDTH, PHONE_BATTERY_HEIGHT } });
-	text_layer_set_text_color(text_phone_battery_layer, GColorWhite);
-	text_layer_set_text_alignment(text_phone_battery_layer, GTextAlignmentCenter);
-	text_layer_set_background_color(text_phone_battery_layer, GColorClear);
-	text_layer_set_font(text_phone_battery_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
+	text_layer_set_text_color(text_battery_phone_layer, GColorWhite);
+	text_layer_set_text_alignment(text_battery_phone_layer, GTextAlignmentCenter);
+	text_layer_set_background_color(text_battery_phone_layer, GColorClear);
+	text_layer_set_font(text_battery_phone_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
 	layer_add_child(window_get_root_layer(win),
-			text_layer_get_layer(text_phone_battery_layer));
+			text_layer_get_layer(text_battery_phone_layer));
 
 	// Temperature layer
 	text_temperature_layer = text_layer_create((GRect) { .origin = { TEMPERATURE_X, TEMPERATURE_Y },
@@ -446,7 +484,7 @@ static void window_load(Window* win) {
 	layer_add_child(window_get_root_layer(win),
 			text_layer_get_layer(text_temperature_layer));
 
-	// No bluetooth layer
+	// Bluetooth warning layer
 	bitmap_bluetooth_warn = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_NO_BLUETOOTH);
 	bitmap_bluetooth_layer = bitmap_layer_create((GRect) { .origin = { BLUETOOTH_WARN_X, BLUETOOTH_WARN_Y },
 				.size = { BLUETOOTH_WARN_WIDTH, BLUETOOTH_WARN_HEIGHT } });
@@ -460,33 +498,40 @@ static void window_appear(Window* win) {
 	// Update here to avoid blank display on launch
 	// and to update when the window is redrawn.
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+
 	time_t now = time(NULL);
-	Weather w;
-	BatteryChargeState b;
+	struct tm* ptime = localtime(&now);
 
-	memset(&w, 0, sizeof(w));
-	memset(&b, 0, sizeof(b));
+	// Draw all the (local) things!
+	draw_dayofweek(ptime);
+	draw_date(ptime);
+	draw_time(ptime);
+	draw_battery_watch(battery_state_service_peek());
 
-	draw_screen(localtime(&now), ALL_TIME_CHANGED,
-		    battery_state_service_peek(), ALL_BATTERY_CHANGED,
-		    b, ALL_BATTERY_CHANGED,
-		    w, 0);
+	// Draw the last known state of the phone information.
+	draw_battery_phone(phone_battery_state);
+	draw_weather(weather_info);
 
 	// If bluetooth is connected (the normal state of things),
 	// don't show the layer yet.
 	layer_set_hidden((Layer*) bitmap_bluetooth_layer, bluetooth_connection_service_peek());
 
 	Tuplet initial_message_values[] = {
-		TupletInteger(WEATHER_MESSAGE_ICON, (uint8_t) 1),
-		TupletCString(WEATHER_MESSAGE_TEMPERATURE, "0000\u00B0C"),
 		TupletInteger(PHONE_BATTERY_PERCENT, (uint8_t) 0),
 		TupletInteger(PHONE_BATTERY_CHARGING, (uint8_t) 0),
 		TupletInteger(PHONE_BATTERY_PLUGGED, (uint8_t) 0),
+		TupletInteger(WEATHER_MESSAGE_ICON, (uint8_t) 0),
+		TupletInteger(WEATHER_MESSAGE_TEMPERATURE, (int32_t) 0),
 	};
 	app_sync_init(&sync, sync_buffer, sizeof(sync_buffer),
 		      initial_message_values, ARRAY_LENGTH(initial_message_values),
 		      sync_tuple_changed_callback, sync_error_callback, NULL);
-	send_message();
+
+	// Let initialization happen, then send the message to get the
+	// values from the phone.
+	app_timer_register(1000 /* ms */,
+			   send_message_callback,
+			   NULL);
 }
 
 static void window_unload(Window *win) {
@@ -498,62 +543,12 @@ static void window_unload(Window *win) {
 	bitmap_layer_destroy(bitmap_bluetooth_layer);
 
 	text_layer_destroy(text_temperature_layer);
-	text_layer_destroy(text_phone_battery_layer);
-	text_layer_destroy(text_watch_battery_layer);
-	text_layer_destroy(text_lower_time_layer);
-	text_layer_destroy(text_lower_date_layer);
+	text_layer_destroy(text_battery_phone_layer);
+	text_layer_destroy(text_battery_watch_layer);
+	text_layer_destroy(text_time_ampm_layer);
 	text_layer_destroy(text_time_layer);
 	text_layer_destroy(text_date_layer);
-}
-
-void handle_minute_tick(struct tm* tick_time, TimeUnits units_changed) {
-	// Assume the battery didn't change.  If it did, the battery update
-	// function will redraw the screen.
-	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
-	Weather w;
-	BatteryChargeState b;
-	draw_screen(tick_time, units_changed,
-		    battery_state_service_peek(), 0,
-		    b, 0,
-		    w, 0);
-
-	// Update the weather frequently, but not every minute.
-	// The "or hour" is there to catch when we first load the watchface.
-	// On "appear", we may not have the message conduit setup yet.
-	if ((tick_time->tm_min % 15 == 0) || (units_changed & HOUR_UNIT)) {
-		APP_LOG(APP_LOG_LEVEL_DEBUG, ">>>> POKING APP TO GIVE ME WEATHER");
-		send_message();
-	}
-}
-
-void handle_battery_update(BatteryChargeState charge_state) {
-	// Get the current time so we have something to pass,
-	// then say that nothing changed: let the tick handler
-	// draw with any updates.
-	// Ugh, can't take address of the temporary returned by time(NULL)
-	// to pass to localtime. :P
-	// XXX Could be smarter and save the battery state and compare, only
-	// setting the field flags as they change.  When I actually use the other
-	// fields, do that.
-	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
-	time_t now = time(NULL);
-	Weather w;
-	BatteryChargeState b;
-	draw_screen(localtime(&now), (TimeUnits) 0,
-		    charge_state, ALL_BATTERY_CHANGED,
-		    b, 0,
-		    w, 0);
-}
-
-void handle_bluetooth_update(bool connected)
-{
-	// If connected, clear the area (or, hide the layer).
-	// If disconnected, show the graphic/layer.
-	layer_set_hidden((Layer*) bitmap_bluetooth_layer, connected);
-
-	if (!connected) {
-		vibes_enqueue_custom_pattern(BLUETOOTH_WARN_VIBE_PATTERN);
-	}
+	text_layer_destroy(text_date_dow_layer);
 }
 
 void do_init() {
@@ -580,19 +575,11 @@ void do_init() {
 	battery_state_service_subscribe(&handle_battery_update);
 	bluetooth_connection_service_subscribe(&handle_bluetooth_update);
 
-	app_message_open(INBOUND_MESSAGE_SIZE, OUTBOUND_MESSAGE_SIZE);
+	// Init the information from the phone until we have real info.
+	memset(&phone_battery_state, 0, sizeof(phone_battery_state));
+	memset(&weather_info, 0, sizeof(weather_info));
 
-	/* Tuplet initial_message_values[] = { */
-	/* 	TupletInteger(WEATHER_MESSAGE_ICON, (uint8_t) 1), */
-	/* 	TupletCString(WEATHER_MESSAGE_TEMPERATURE, "0000\u00B0C"), */
-	/* 	TupletInteger(PHONE_BATTERY_PERCENT, (uint8_t) 0), */
-	/* 	TupletInteger(PHONE_BATTERY_CHARGING, (uint8_t) 0), */
-	/* 	TupletInteger(PHONE_BATTERY_PLUGGED, (uint8_t) 0), */
-	/* }; */
-	/* app_sync_init(&sync, sync_buffer, sizeof(sync_buffer), */
-	/* 	      initial_message_values, ARRAY_LENGTH(initial_message_values), */
-	/* 	      sync_tuple_changed_callback, sync_error_callback, NULL); */
-//	send_message();
+	app_message_open(INBOUND_MESSAGE_SIZE, OUTBOUND_MESSAGE_SIZE);
 }
 
 void do_deinit(void) {
