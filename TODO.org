@@ -9,20 +9,31 @@ TODOs for my watch face
 * DONE Add timer/graphic when haven't heard from phone in a while
   CLOSED: [2014-03-30 Sun 05:28]
   So I can see if the weather is up to date or not (and phone battery)
-* TODO Adjust the graphics a bit
+* TODO Adjust the graphics a bit for battery to look more sexy
+* TODO Add more weather graphics for more kinds of weather
+* DONE Fix the unsigned temperature problem
+  CLOSED: [2014-04-20 Sun 07:34]
 * DONE Draw weather icon
   CLOSED: [2014-03-30 Sun 16:00]
+* DONE Add timezones of interest
+  CLOSED: [2014-04-03 Thu 19:49]
+  Easy to do a plain offset, harder to do for real timezones
+* DONE Add swatch .beats
+  CLOSED: [2014-04-20 Sun 08:22]
+* TODO Get real current timezone from the phone app
 * TODO Add seconds display (small and to the right of AM/PM?)
 
 
 2.0 SDK
-* INPROGRESS Add pebble battery percent
+* DONE INPROGRESS Add pebble battery percent
+  CLOSED: [2014-04-20 Sun 07:34]
 ** DONE Smaller font
    CLOSED: [2014-01-07 Tue 11:06]
    :LOGBOOK:
    - State "DONE"       from "TODO"       [2014-01-07 Tue 11:06]
    :END:
-** TODO Graphic for battery, rather than text
+** DONE Graphic for battery, rather than text
+   CLOSED: [2014-04-20 Sun 07:34]
 * DONE Add indicator (reverse video?) when not connected to phone via bluetooth
   CLOSED: [2014-01-31 Fri 18:55]
   :LOGBOOK:
@@ -40,7 +51,6 @@ TODOs for my watch face
   It doesn't have a retry.
 * DONE Send message to phone app to trigger weather/battery when watchface first loads
   CLOSED: [2014-03-30 Sun 10:02]
-* TODO Timezone?
 * For the phone app
 * TODO Add controls for how often the watch should be updated
 

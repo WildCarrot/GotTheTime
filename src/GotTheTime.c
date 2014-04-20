@@ -9,7 +9,7 @@ Used "Simplicity" watchface as a guide, but I want the day of the week.
 | 2013-10-06 | <<< date area
 |            |
 |    09:23   | <<< time in big font
-|            |
+|            | <<< time zones, .beats in tiny font
 | sun    10d | <<< weather
 +------------+
 
@@ -56,13 +56,13 @@ Used "Simplicity" watchface as a guide, but I want the day of the week.
 #define TIME_X DRAW_INSET
 #define TIME_Y 68 // DATE_Y + DATE_HEIGHT + FONT_PAD_Y
 #define TIME_WIDTH  DRAW_WIDTH
-#define TIME_HEIGHT 51 // LARGE_FONT_HEIGHT + FONT_PAD_Y
+#define TIME_HEIGHT 74 // LARGE_FONT_HEIGHT + SMALL_FONT_HEIGHT + 2 * FONT_PAD_Y
 
 /* Weather area */
 #define WEATHER_X DRAW_INSET
-#define WEATHER_Y 120 // TIME_Y + TIME_HEIGHT
+#define WEATHER_Y 142 // TIME_Y + TIME_HEIGHT
 #define WEATHER_WIDTH  DRAW_WIDTH
-#define WEATHER_HEIGHT 48 // SCREEN_HEIGHT - DRAW_INSET - WEATHER_Y
+#define WEATHER_HEIGHT 26 // SCREEN_HEIGHT - DRAW_INSET - WEATHER_Y
 
 // ---------- Options and vibes ------------------------------
 
@@ -143,6 +143,9 @@ TextLayer* date_text_layer;
 
 Layer* time_layer;    // Time
 TextLayer* time_text_layer;
+TextLayer* time_tz1_text_layer;
+TextLayer* time_tz2_text_layer;
+TextLayer* time_beats_text_layer;
 
 Layer* weather_layer; // Weather info
 BitmapLayer* weather_cond_layer;
@@ -170,13 +173,7 @@ void draw_date(struct tm* ptime) {
 	text_layer_set_text(date_text_layer, date_text);
 }
 
-void draw_time(struct tm* ptime) {
-	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
-
-	// Although this makes it different from the other "per line"
-	// drawing functions, the time is all related, so update all
-	// the time lines in the same function.
-	static char time_text[]  = "00:00";
+void draw_one_time(struct tm* ptime, char* s, const uint8_t slen, TextLayer* tlayer) {
 	char* time_format = NULL;
 
 	// Time, not including seconds
@@ -189,14 +186,67 @@ void draw_time(struct tm* ptime) {
 		// so remove the zero after formatting the text.
 		time_format = "%I:%M";
 	}
-	strftime(time_text, sizeof(time_text), time_format, ptime);
+	strftime(s, slen, time_format, ptime);
 
 	// Hack to remove a leading zero or space for 12-hour times.
 	if (!clock_is_24h_style()) {
-		memmove(time_text, &time_text[1], sizeof(time_text) - 1);
+		memmove(s, &s[1], slen - 1);
 	}
 
-	text_layer_set_text(time_text_layer, time_text);
+	text_layer_set_text(tlayer, s);
+}
+
+int compute_beats(struct tm* utc_time) {
+	// This is the floor, not rounded down.  Not yet sure if it matters.
+	return ((utc_time->tm_sec + (utc_time->tm_min * 60) +
+		 (utc_time->tm_hour * 3600)) / 86.4);
+}
+
+void draw_beats_time(struct tm* utc_time, char* s, const uint8_t slen, TextLayer* tlayer) {
+	int beats = compute_beats(utc_time);
+
+	snprintf(s, slen, "@%03d", beats);
+
+	text_layer_set_text(tlayer, s);
+}
+
+void draw_time(struct tm* ptime) {
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
+
+	static char time_text[] = "00:00";
+	static char tz1_text[]  = "00:00";
+	static char tz2_text[]  = "00:00";
+	static char beats_text[]= "@000";
+
+	// Although this makes it different from the other "per line"
+	// drawing functions, the time is all related, so update all
+	// the time lines in the same function.
+
+	// Local time
+	draw_one_time(ptime, time_text, sizeof(time_text), time_text_layer);
+
+	// XXX Since there's no good way to get UTC time from the watch
+	//     we have to fake other timezones.  This will break if I
+	//     ever travel or for daylight savings time. :(
+	time_t tz_t;
+	time(&tz_t);  // This is local to the current timezone.
+
+	// Additional time zone 1
+	time_t tz1_t = tz_t + (-3 * 60 * 60); // Pacific relative to my timezone
+	struct tm* tz1_time = gmtime(&tz1_t);
+	draw_one_time(tz1_time, tz1_text, sizeof(tz1_text), time_tz1_text_layer);
+
+	// Additional time zone 2
+	time_t tz2_t = tz_t + (+6 * 60 * 60);
+	struct tm* tz2_time = gmtime(&tz2_t); // Central Europe relative to my timezone
+	draw_one_time(tz2_time, tz2_text, sizeof(tz2_text), time_tz2_text_layer);
+
+	// Beats time
+	// No daylight savings time in .beats.  It's normally UTC+1 that's the
+	// basis for .beats, but we're in DST now, so it should just be UTC.
+	time_t utc_t = tz_t + (+5 * 60 * 60);
+	struct tm* utc_time = gmtime(&utc_t);
+	draw_beats_time(utc_time, beats_text, sizeof(beats_text), time_beats_text_layer);
 
 	if (VIBRATE_HOURLY && (ptime->tm_min == 0)) {
 		vibes_enqueue_custom_pattern(HOUR_VIBE_PATTERN);
@@ -364,7 +414,7 @@ static void sync_tuple_changed_callback(const uint32_t key,
 		break;
 	case WEATHER_MESSAGE_TEMPERATURE:
 		if (new_values && new_values->value) {
-			weather_info.temp = new_values->value->uint8;
+			weather_info.temp = new_values->value->int8;
 			APP_LOG(APP_LOG_LEVEL_DEBUG, "%s WEATHER_MESSAGE_TEMPERATURE: %d",
 				__FUNCTION__, (int) weather_info.temp);
 			update_weather = true;
@@ -497,15 +547,47 @@ static void window_load(Window* win) {
 
 		time_layer = layer_create(time_rect);
 
+		int small_time_h = 16;
+		int big_time_h = TIME_HEIGHT - small_time_h;
+
 		time_text_layer = text_layer_create((GRect) { .origin = { 0, 0 },
-					.size = { TIME_WIDTH, TIME_HEIGHT } });
+					.size = { TIME_WIDTH, big_time_h } });
 
 		text_layer_set_text_color(time_text_layer, GColorWhite);
 		text_layer_set_text_alignment(time_text_layer, GTextAlignmentCenter);
 		text_layer_set_background_color(time_text_layer, GColorClear);
 		text_layer_set_font(time_text_layer, font_49_numbers);
 
+		int small_time_w = TIME_WIDTH / 3.0;
+
+		time_tz1_text_layer = text_layer_create((GRect) { .origin = { 0, big_time_h },
+					.size = { small_time_w, small_time_h } });
+
+		text_layer_set_text_color(time_tz1_text_layer, GColorWhite);
+		text_layer_set_text_alignment(time_tz1_text_layer, GTextAlignmentCenter);
+		text_layer_set_background_color(time_tz1_text_layer, GColorClear);
+		text_layer_set_font(time_tz1_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+
+		time_beats_text_layer = text_layer_create((GRect) { .origin = { small_time_w, big_time_h },
+					.size = { small_time_w, small_time_h } });
+
+		text_layer_set_text_color(time_beats_text_layer, GColorWhite);
+		text_layer_set_text_alignment(time_beats_text_layer, GTextAlignmentCenter);
+		text_layer_set_background_color(time_beats_text_layer, GColorClear);
+		text_layer_set_font(time_beats_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+
+		time_tz2_text_layer = text_layer_create((GRect) { .origin = { small_time_w*2, big_time_h },
+					.size = { small_time_w, small_time_h } });
+
+		text_layer_set_text_color(time_tz2_text_layer, GColorWhite);
+		text_layer_set_text_alignment(time_tz2_text_layer, GTextAlignmentCenter);
+		text_layer_set_background_color(time_tz2_text_layer, GColorClear);
+		text_layer_set_font(time_tz2_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+
 		layer_add_child(time_layer, text_layer_get_layer(time_text_layer));
+		layer_add_child(time_layer, text_layer_get_layer(time_tz1_text_layer));
+		layer_add_child(time_layer, text_layer_get_layer(time_beats_text_layer));
+		layer_add_child(time_layer, text_layer_get_layer(time_tz2_text_layer));
 
 		layer_add_child(window_get_root_layer(win), time_layer);
 	}
@@ -521,10 +603,10 @@ static void window_load(Window* win) {
 		// conditions        temperature
 		int half_w = WEATHER_WIDTH / 2.0;
 
-		// XXX create weather icon bitmaps
+		// XXX create weather icon bitmaps statically
 		weather_cond_layer = bitmap_layer_create((GRect) { .origin = { 0, 0 },
 					.size = { half_w, WEATHER_HEIGHT } });
-		weather_temp_layer = text_layer_create((GRect) { .origin = { half_w, 15 },
+		weather_temp_layer = text_layer_create((GRect) { .origin = { half_w, 5 },
 					.size = { half_w, WEATHER_HEIGHT } });
 
 		weather_cond_bitmap = gbitmap_create_with_resource(WEATHER_ICONS[WEATHER_ICON_NONE]);
@@ -533,7 +615,7 @@ static void window_load(Window* win) {
 		text_layer_set_text_color(weather_temp_layer, GColorWhite);
 		text_layer_set_text_alignment(weather_temp_layer, GTextAlignmentCenter);
 		text_layer_set_background_color(weather_temp_layer, GColorClear);
-		text_layer_set_font(weather_temp_layer, font_21);
+		text_layer_set_font(weather_temp_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 
 		layer_add_child(weather_layer, bitmap_layer_get_layer(weather_cond_layer));
 		layer_add_child(weather_layer, text_layer_get_layer(weather_temp_layer));
@@ -587,6 +669,9 @@ static void window_unload(Window *win) {
 	text_layer_destroy(weather_temp_layer);
 	layer_destroy(weather_layer);
 
+	text_layer_destroy(time_tz2_text_layer);
+	text_layer_destroy(time_beats_text_layer);
+	text_layer_destroy(time_tz1_text_layer);
 	text_layer_destroy(time_text_layer);
 	layer_destroy(time_layer);
 
