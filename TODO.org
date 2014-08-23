@@ -10,7 +10,13 @@ TODOs for my watch face
   CLOSED: [2014-03-30 Sun 05:28]
   So I can see if the weather is up to date or not (and phone battery)
 * TODO Adjust the graphics a bit for battery to look more sexy
-* TODO Add more weather graphics for more kinds of weather
+* CANCELED Add more weather graphics for more kinds of weather
+  CLOSED: [2014-07-20 Sun 07:21]
+  :LOGBOOK:
+  - State "CANCELED"   from "TODO"       [2014-07-20 Sun 07:21] \\
+    I'm giving up on the weather.
+  :END:
+* TODO Add phone cell signal strength and wifi signal strength
 * DONE Fix the unsigned temperature problem
   CLOSED: [2014-04-20 Sun 07:34]
 * DONE Draw weather icon
@@ -62,3 +68,4 @@ TODOs for my watch face
   javascript way to do it.
 
   <2014-03-30 Sun> But, it seems flaky as hell.  Going back to using the phone app.
+* TODO Figure out why the app crashes sometimes

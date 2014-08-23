@@ -61,8 +61,14 @@ Used "Simplicity" watchface as a guide, but I want the day of the week.
 /* Weather area */
 #define WEATHER_X DRAW_INSET
 #define WEATHER_Y 142 // TIME_Y + TIME_HEIGHT
-#define WEATHER_WIDTH  DRAW_WIDTH
+#define WEATHER_WIDTH  72 // DRAW_WIDTH / 2
 #define WEATHER_HEIGHT 26 // SCREEN_HEIGHT - DRAW_INSET - WEATHER_Y
+
+/* Signal strength area */
+#define SIGNAL_X WEATHER_WIDTH
+#define SIGNAL_Y WEATHER_Y
+#define SIGNAL_WIDTH  72 // DRAW_WIDTH / 2
+#define SIGNAL_HEIGHT 26 // SCREEN_HEIGHT - DRAW_INSET - SIGNAL_Y
 
 // ---------- Options and vibes ------------------------------
 
@@ -90,14 +96,24 @@ typedef enum {
 	PHONE_BATTERY_PERCENT = 0, // TUPLE_UINT
 	PHONE_BATTERY_CHARGING = 1, // TUPLE_UINT
 	PHONE_BATTERY_PLUGGED = 2, // TUPLE_UINT
-	WEATHER_MESSAGE_ICON = 3, // TUPLE_UINT
-	WEATHER_MESSAGE_TEMPERATURE = 4, // TUPLE_UINT
+	PHONE_BATTERY_LOW = 3, // TUPLE_UINT
+	WEATHER_MESSAGE_ICON = 4, // TUPLE_UINT
+	WEATHER_MESSAGE_TEMPERATURE = 5, // TUPLE_UINT
+	TIMEZONE = 6, // TUPLE_INT (-5 from UTC, for example)
+	SIGNAL_STRENGTH_CELL = 7, // TUPLE_UINT
+	SIGNAL_STRENGTH_WIFI = 8, // TUPLE_UINT
+	CELL_SERVICE_STATE = 9, // TUPLE_UINT
 } GTTMessageIndex; // GotTheTime App Message indexes
 
 // Weather Icon codes are here:
 // http://bugs.openweathermap.org/projects/api/wiki/Weather_Condition_Codes
 typedef enum {
         WEATHER_ICON_NONE = 0,
+	// TODO: Started to make these line up with the icons to
+	// be able to handle more of the weather condition codes.
+	/* WEATHER_ICON_CLEAR = 1, */
+	/* WEATHER_ICON_FEW_CLOUDS = 2, */
+	/* WEATHER_ICON_SCATTERED_CLOUDS =3, */
 	WEATHER_ICON_RAIN = 1,  // 200 - 500
 	WEATHER_ICON_SNOW = 2,  // 600
 	WEATHER_ICON_SUN = 3,   // 800, 801
@@ -112,12 +128,12 @@ static uint32_t WEATHER_ICONS[] = {
 	RESOURCE_ID_IMAGE_WEATHER_CLOUD,
 };
 
-#define INBOUND_MESSAGE_SIZE 64
-#define OUTBOUND_MESSAGE_SIZE 64
+#define INBOUND_MESSAGE_SIZE 128
+#define OUTBOUND_MESSAGE_SIZE 128
 
 // For getting information from the companion app on the phone.
 AppSync sync;
-uint8_t sync_buffer[64];
+uint8_t sync_buffer[128];
 
 typedef struct {
 	uint8_t icon;
@@ -127,6 +143,8 @@ typedef struct {
 // Last known state
 BatteryChargeState phone_battery_state;
 WeatherInfo weather_info;
+uint signal_level_cell;
+uint cell_service_state;
 
 // ---------- Graphics layers and fonts ------------------------------
 
@@ -151,6 +169,9 @@ Layer* weather_layer; // Weather info
 BitmapLayer* weather_cond_layer;
 GBitmap* weather_cond_bitmap;
 TextLayer* weather_temp_layer;
+
+Layer* signal_layer; // Signal strength info
+TextLayer* signal_strength_layer;
 
 GFont font_21;
 GFont font_49_numbers;
@@ -315,6 +336,22 @@ void draw_weather(WeatherInfo winfo) {
 	}
 }
 
+void draw_signals(uint level, uint service_state) {
+	// TODO Change to graphic
+	static char level_text[] = "00"; // Level is 0-4
+
+	snprintf(level_text, sizeof(level_text), "%1d", level);
+
+	if (service_state == 0) {
+		snprintf(level_text, sizeof(level_text), "!!");
+	}
+	else {
+		snprintf(level_text, sizeof(level_text), "");
+	}
+
+	text_layer_set_text(signal_strength_layer, level_text);
+}
+
 
 // ---------- Message functions ------------------------------
 
@@ -375,6 +412,7 @@ static void sync_tuple_changed_callback(const uint32_t key,
 {
 	bool update_battery = false;
 	bool update_weather = false;
+	bool update_signals = false;
 
 	switch (key) {
 
@@ -420,7 +458,22 @@ static void sync_tuple_changed_callback(const uint32_t key,
 			update_weather = true;
 		}
 		break;
-
+	case SIGNAL_STRENGTH_CELL:
+		if (new_values && new_values->value) {
+			signal_level_cell = new_values->value->uint8;
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "%s SIGNAL_LEVEL_CELL: %d",
+				__FUNCTION__, signal_level_cell);
+			update_signals = true;
+		}
+		break;
+	case CELL_SERVICE_STATE:
+		if (new_values && new_values->value) {
+			cell_service_state = new_values->value->uint8;
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "%s CELL_SERVICE_STATE: %d",
+				__FUNCTION__, cell_service_state);
+			update_signals = true;
+		}
+		break;
 	};
 
 	if (update_battery) {
@@ -429,6 +482,10 @@ static void sync_tuple_changed_callback(const uint32_t key,
 
 	if (update_weather) {
 		draw_weather(weather_info);
+	}
+
+	if (update_signals) {
+		draw_signals(signal_level_cell, cell_service_state);
 	}
 }
 
@@ -622,6 +679,25 @@ static void window_load(Window* win) {
 
 		layer_add_child(window_get_root_layer(win), weather_layer);
 	}
+
+	// Signal strength layer
+	{
+		GRect signal_rect = { .origin = { SIGNAL_X, SIGNAL_Y },
+				       .size = { SIGNAL_WIDTH, SIGNAL_HEIGHT } };
+
+		signal_layer = layer_create(signal_rect);
+
+		signal_strength_layer = text_layer_create(signal_rect);
+
+		text_layer_set_text_color(signal_strength_layer, GColorWhite);
+		text_layer_set_text_alignment(signal_strength_layer, GTextAlignmentCenter);
+		text_layer_set_background_color(signal_strength_layer, GColorClear);
+		text_layer_set_font(signal_strength_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+
+		layer_add_child(signal_layer, text_layer_get_layer(signal_strength_layer));
+
+		layer_add_child(window_get_root_layer(win), signal_layer);
+	}
 }
 
 static void window_appear(Window* win) {
@@ -640,6 +716,7 @@ static void window_appear(Window* win) {
 
 	// Draw the last known state of the phone information.
 	draw_weather(weather_info);
+	draw_signals(signal_level_cell, cell_service_state);
 
 	Tuplet initial_message_values[] = {
 		TupletInteger(PHONE_BATTERY_PERCENT, (uint8_t) 0),
@@ -647,6 +724,7 @@ static void window_appear(Window* win) {
 		TupletInteger(PHONE_BATTERY_PLUGGED, (uint8_t) 0),
 		TupletInteger(WEATHER_MESSAGE_ICON, (uint8_t) 0),
 		TupletInteger(WEATHER_MESSAGE_TEMPERATURE, (int32_t) 0),
+		TupletInteger(SIGNAL_STRENGTH_CELL, (uint8_t) 0),
 	};
 	app_sync_init(&sync, sync_buffer, sizeof(sync_buffer),
 		      initial_message_values, ARRAY_LENGTH(initial_message_values),
@@ -663,6 +741,9 @@ static void window_unload(Window *win) {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "%s", __FUNCTION__);
 
 	app_sync_deinit(&sync);
+
+	text_layer_destroy(signal_strength_layer);
+	layer_destroy(signal_layer);
 
 	gbitmap_destroy(weather_cond_bitmap);
 	bitmap_layer_destroy(weather_cond_layer);
