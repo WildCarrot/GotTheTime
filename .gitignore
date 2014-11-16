@@ -2,3 +2,5 @@
 # Ignore build generated files
 build
 *~
+.lock*
+.emacs.desktop
