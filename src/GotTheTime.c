@@ -346,7 +346,7 @@ void draw_signals(uint level, uint service_state) {
 		snprintf(level_text, sizeof(level_text), "!!");
 	}
 	else {
-		snprintf(level_text, sizeof(level_text), "");
+		level_text[0] = '\0';
 	}
 
 	text_layer_set_text(signal_strength_layer, level_text);
