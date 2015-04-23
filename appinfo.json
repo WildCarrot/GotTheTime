@@ -10,11 +10,11 @@
   },
   "capabilities": [],
   "appKeys": {
-      "WEATHER_MESSAGE_ICON": 0,
-      "WEATHER_MESSAGE_TEMPERATURE": 1,
-      "PHONE_BATTERY_PERCENT": 2,
-      "PHONE_BATTERY_CHARGINE": 3,
-      "PHONE_BATTERY_PLUGGED": 4
+    "WEATHER_MESSAGE_ICON": 0,
+    "WEATHER_MESSAGE_TEMPERATURE": 1,
+    "PHONE_BATTERY_PERCENT": 2,
+    "PHONE_BATTERY_CHARGINE": 3,
+    "PHONE_BATTERY_PLUGGED": 4
   },
   "resources": {
     "media": [
@@ -35,31 +35,36 @@
         "name": "FONT_UBUNTU_B_SUBSET_49",
         "file": "fonts/Ubuntu-B.ttf"
       },
-	{
-	    "type": "png",
-	    "name": "IMAGE_WEATHER_NONE",
-	    "file": "images/WeatherUnknown.png"
-	},
-	{
-	    "type": "png",
-	    "name": "IMAGE_WEATHER_RAIN",
-	    "file": "images/WeatherRainy.png"
-	},
-	{
-	    "type": "png",
-	    "name": "IMAGE_WEATHER_SNOW",
-	    "file": "images/WeatherSnowy.png"
-	},
-	{
-	    "type": "png",
-	    "name": "IMAGE_WEATHER_SUN",
-	    "file": "images/WeatherSunny.png"
-	},
-	{
-	    "type": "png",
-	    "name": "IMAGE_WEATHER_CLOUD",
-	    "file": "images/WeatherCloudy.png"
-	}
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_NONE",
+        "file": "images/WeatherUnknown.png"
+      },
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_RAIN",
+        "file": "images/WeatherRainy.png"
+      },
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_SNOW",
+        "file": "images/WeatherSnowy.png"
+      },
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_SUN",
+        "file": "images/WeatherSunny.png"
+      },
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_CLOUD",
+        "file": "images/WeatherCloudy.png"
+      }
     ]
-  }
+  },
+  "targetPlatforms": [
+    "aplite",
+    "basalt"
+  ],
+  "sdkVersion": "3"
 }
